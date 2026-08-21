@@ -26,7 +26,7 @@ Metadata lines such as:
 are ignored.
 
 Usage:
-    python count_characters.py --root "C:\\path\\to\\CEB"
+    python preprocessing\count_characters.py --root "C:\\path\\to\\CEB"
 """
 
 import argparse

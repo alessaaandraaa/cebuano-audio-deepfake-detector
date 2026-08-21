@@ -16,7 +16,7 @@ writes a manifest CSV with one row per clip (this manifest is your
 labeling step -- every row is tagged label=bonafide automatically).
 
 Usage:
-    python inventory_bonafide.py --root "C:\\path\\to\\bonafide" --out manifests\\manifest_bonafide.csv
+    python preprocessing\inventory_bonafide.py --root "C:\\path\\to\\bonafide" --out manifests\\manifest_bonafide.csv
 """
 
 import argparse

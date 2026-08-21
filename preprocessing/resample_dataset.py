@@ -14,7 +14,7 @@ writes it to a mirrored folder structure under --out. Raw originals
 under --root are never modified.
 
 Usage:
-    python resample_dataset.py --root "C:\\path\\to\\raw\\bonafide" --out data\\processed\\bonafide
+    python preprocessing\resample_dataset.py --root "C:\\path\\to\\raw\\bonafide" --out data\\processed\\bonafide
 """
 
 import argparse
