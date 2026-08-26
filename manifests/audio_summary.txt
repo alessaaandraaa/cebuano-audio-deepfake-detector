@@ -1,26 +1,41 @@
+============================================================
 Bonafide dataset inventory: C:\Users\Ninzz\Programming\PLD\up-dsp-pld\PLD\CEB
 ============================================================
-Total clips found      : 56928
-Total speakers         : 140
-Total duration (hours) : 58.51
-Sample rate(s) seen    : [16000, 44100]
-Channel count(s) seen  : [1]
-Files that failed      : 1
+Total INCLUDED clips    : 56526
+Total speakers          : 140
+Total duration (hours)  : 54.41
+Excluded TGL clips      : 402
+Files that failed       : 0
+Sample rate(s) seen     : [16000, 44100]
+Channel count(s) seen   : [1]
 
 ⚠ Multiple sample rates detected — resample to a consistent rate (likely 16kHz for XLS-R) before training.
+
+TGL exclusions:
+  [0201] 0201.111024.022631.0479.wav (TGL_spontaneous.txt)
+  [0201] 0201.111024.022631.0481.wav (TGL_spontaneous.txt)
+  [0202] 0202.111024.005622.0426.wav (TGL_spontaneous.txt)
+  [0202] 0202.111024.005622.0427.wav (TGL_spontaneous.txt)
+  [0203] 0203.111024.084752.0379.wav (TGL_spontaneous.txt)
+  [0203] 0203.111024.084752.0380.wav (TGL_spontaneous.txt)
+  [0203] 0203.111024.084752.0381.wav (TGL_spontaneous.txt)
+  [0204] 0204.111024.073059.0614.wav (TGL_spontaneous.txt)
+  [0204] 0204.111024.073059.0616.wav (TGL_spontaneous.txt)
+  [0204] 0204.111024.073059.0617.wav (TGL_spontaneous.txt)
+  ... and 392 more
 
 Speakers with fewest clips:
   0268: 94 clips
   0335: 143 clips
   0340: 143 clips
-  0345: 183 clips
-  0380: 183 clips
+  0345: 182 clips
+  0380: 182 clips
 Speakers with most clips:
-  0263: 449 clips
-  0264: 449 clips
-  0265: 449 clips
-  0266: 449 clips
-  0267: 454 clips
+  0243: 447 clips
+  0251: 447 clips
+  0254: 447 clips
+  0255: 447 clips
+  0267: 450 clips
 
 Speaker gender breakdown: {'male': 59, 'female': 81}
 Speaker dialect breakdown: {'Cebuano - Northern Mindanao': 1, 'Cebuano': 15, 'Cebuano - Bohol': 11, 'Cebuano - Cebu': 28, 'Cebuano - Surigaonon': 1, 'Cebuano - Cebu City': 6, 'Cebuano - Leyte': 3, 'Cebuano - Carcar City': 1, 'Cebuano - Mindanao': 1, 'Cebuano - Mandaue City': 2, 'Cebuano - Cebu ': 1, 'Cebuano - Barili': 1, 'Cebuano - Dipolog': 1, 'Cebuano - Lapu-Lapu City': 2, 'Cebuano - Bacayan, Cebu City': 1, 'Cebuano, Kiray-a': 1, 'Cebuano - Agusan Del Norte': 1, 'Cebuano - Esperanza, Cebu City': 1, 'Cebuano - Tagunol, Cebu City': 1, 'Cebuano - Balamban, Cebu City': 1, 'Cebuano - Medellin, Cebu City': 1, 'Cebuano - Masbate': 1, 'Cebuano - Misamis Occidental': 1, 'Cebuano - Surigao': 1, 'Cebuano (Butuan)': 1, 'Cebuano - Talamban City': 1, 'Cebuano - Cagayan de Oro': 5, 'Bisaya - Lanao del Norte': 1, 'Cebuano - Zamboanga Del Sur': 1, 'Cebuano - CDO': 1, 'Cebuano - General Santos': 2, 'Cebuano - Iligan': 2, 'Cebuano - Southern Leyte': 4, 'Cebuano - Biliran': 2, 'Bisaya - Tacloban': 1, 'Cebuano - Ozamis': 1, 'Cebuano - Cagayan De Oro': 1, 'Cebuano - Davao del Sur': 2, 'Cebuano - Southern Samar': 1, 'Bisaya - Tacloban City, Leyte': 1, 'Cebuano - Agusan del Sur': 1, 'Bisaya - Misamis Oriental': 1, 'Cebuano - Davao': 2, 'Cebuano - Lanao del Norte': 1, 'Cebuano - General Santos City': 1, 'Bisaya - Zamboanga del Sur': 1, 'Cebuano-Mindanao': 1, 'Cebuano - Bukidnon': 1, 'Cebuano - Zamboanga del Sur': 1, 'Cebuano - Misamis Oriental': 1, 'Bisaya - Davao City': 1, 'cebuano - cebu': 2, 'bisaya - davao city': 1, 'bisaya - davao': 2, 'Bisaya - Davao': 2, 'cebuano - davao city': 6, 'bisaya - trento, agusan del sur': 1, 'cebuano - davao': 1, 'cebuano - davao del norte': 1, 'cebuano - compostela valley': 1}
