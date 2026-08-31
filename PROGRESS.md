@@ -1,3 +1,14 @@
 ## 8/24/2026
 
 - Created cleaned transcript files.
+speaker_id  wav_filename    transcript  saying
+0201	0201.111024.022631.0467.wav 86 ochinta sais
+0201	0201.111024.022631.0468.wav	63 saisinta tres
+0201	0201.111024.022631.0469.wav	24 biyente kwatro
+0201	0201.111024.022631.0470.wav	27 biyente siete
+0201	0201.111024.022631.0471.wav	86 ochinta sais
+0201	0201.111024.022631.0472.wav	64 saisinta kwatro
+0201	0201.111024.022631.0474.wav	6 unom
+0201	0201.111024.022631.0475.wav	80 ochinta
+0201	0201.111024.022631.0476.wav	17 dyese shete
+0201	0201.111024.022631.0477.wav	89 ochinta noybe

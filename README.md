@@ -22,6 +22,7 @@ Then
 pip install soundfile librosa pandas numpy` // for processing
 pip install wandb scikit-learn` // for general ML
 pip install transformers accelerate scipy` // for Meta MMS
+pip install elevenlabs python-dotenv
 ```
 
 `winget install ffmpeg` on your terminal

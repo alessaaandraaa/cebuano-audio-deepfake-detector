@@ -1,7 +1,9 @@
 venv/
 data/
 transcripts/
+transcripts_mms/
 elevenlabs-reference/
+manifests/elevenlabs_voice_ids.txt
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]

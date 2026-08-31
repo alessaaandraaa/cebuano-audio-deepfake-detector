@@ -12,19 +12,25 @@ Input:
         0203,male
         0204,male
 
-    transcripts/
+    transcripts_mms/
         0200.txt
         0203.txt
         0204.txt
 
 Each transcript file contains:
 
-    filename.wav<TAB>transcript
+    filename.wav<TAB>normalized_transcript
 
 Example:
 
-    0200.111020.092714.0121.wav    Maayong buntag.
-    0200.111020.092714.0122.wav    Asa ka padulong?
+    0200.111020.092714.0121.wav    maayong buntag
+    0200.111020.092714.0122.wav    asa ka padulong
+
+IMPORTANT:
+    This script performs NO text normalization.
+
+    All transcript normalization required for MMS must already have
+    been performed by normalize_mms.py.
 
 Output:
 
@@ -40,34 +46,47 @@ Raw/original audio is never modified.
 
 Usage:
 
-    python preprocessing\\generate_mms.py --speakers manifests\\mms_selected_speakers.csv --transcripts transcripts --out data\\processed\\meta-mms
+    python preprocessing\\meta_mms\\generate_mms.py --speakers manifests\\mms_selected_speakers.csv --transcripts transcripts_mms --out data\\processed\\meta-mms
 
-Test only 5 utterances:
+Test only 10 utterances per speaker:
 
-    python preprocessing\\generate_mms.py --speakers manifests\\mms_selected_speakers.csv --transcripts transcripts --out data\\processed\\meta-mms --limit 10
+    python preprocessing\\generate_mms.py ^
+        --speakers manifests\\mms_selected_speakers.csv ^
+        --transcripts transcripts_mms ^
+        --out data\\processed\\meta-mms ^
+        --limit 10
 """
 
 import argparse
 import csv
-import re
 import sys
 from pathlib import Path
-import unicodedata
+
+
+# ---------------------------------------------------------------------------
+# DEPENDENCIES
+# ---------------------------------------------------------------------------
 
 try:
     import torch
     import soundfile as sf
-    from transformers import VitsModel, VitsTokenizer, set_seed
+    from transformers import (
+        VitsModel,
+        VitsTokenizer,
+        set_seed,
+    )
 
 except ImportError:
     print(
         "Missing dependency(s). Run:",
         file=sys.stderr,
     )
+
     print(
         "pip install torch transformers soundfile",
         file=sys.stderr,
     )
+
     sys.exit(1)
 
 
@@ -86,51 +105,6 @@ SEED = 42
 set_seed(SEED)
 
 
-
-# ---------------------------------------------------------------------------
-# TEXT NORMALIZATION
-# ---------------------------------------------------------------------------
-
-CEB_DIGITS = {
-    "0": "sero", "1": "usa", "2": "duha", "3": "tulo", "4": "upat",
-    "5": "lima", "6": "unom", "7": "pito", "8": "walo", "9": "siyam"
-}
-
-def normalize_text(text: str) -> str:
-    # 1. Expand Spanish 'ñ' -> 'ny'
-    text = text.replace("ñ", "ny").replace("Ñ", "Ny")
-
-    # 2. Strip tone accents / diacritics (á -> a, ô -> o, etc.)
-    text = unicodedata.normalize("NFKD", text)
-    text = "".join(char for char in text if not unicodedata.combining(char))
-
-    # 3. Convert numbers to words (MMS has no number vocabs)
-    for digit, word in CEB_DIGITS.items():
-        text = re.sub(rf"\b{digit}\b", word, text)
-
-    # 4. Normalize Cebuano glottal hyphens and punctuation
-    # Turn dashes inside compound words (e.g., 'kan-anan', 'kanus-a') into spaces
-    # so the tokenizer treats both morphemes as distinct syllables
-    text = re.sub(r"(\w)-(\w)", r"\1 \2", text)
-    
-    # 5. Clean out unsupported symbols (colons, quotes, slashes, brackets)
-    text = re.sub(r'["\'():;/\\]', '', text)
-    
-    text = text.lower()
-    text = " ".join(text.split())
-
-    # 6. Prosody & Plosive bounds
-    # A single leading comma gives plosives (P, B, T, K) room to attack
-    text = ", " + text
-
-    # Ensure clean terminal punctuation so pitch drops naturally
-    if not text.endswith((".", "?", "!")):
-        text += "."
-
-    return text
-
-
-
 # ---------------------------------------------------------------------------
 # LOAD SPEAKERS
 # ---------------------------------------------------------------------------
@@ -138,6 +112,15 @@ def normalize_text(text: str) -> str:
 def load_selected_speakers(
     csv_path: Path,
 ) -> list[str]:
+    """
+    Load speaker IDs from the speaker-selection CSV.
+
+    Expected CSV:
+
+        speaker_id,speaker_gender
+        0200,male
+        0203,male
+    """
 
     speakers = []
 
@@ -151,26 +134,34 @@ def load_selected_speakers(
         reader = csv.DictReader(f)
 
         if not reader.fieldnames:
+
             print(
                 "ERROR: speaker CSV has no header.",
                 file=sys.stderr,
             )
+
             sys.exit(1)
 
         if "speaker_id" not in reader.fieldnames:
+
             print(
                 "ERROR: speaker CSV must contain "
                 "'speaker_id' column.",
                 file=sys.stderr,
             )
+
             sys.exit(1)
 
         for row in reader:
 
-            speaker_id = row["speaker_id"].strip()
+            speaker_id = row[
+                "speaker_id"
+            ].strip()
 
             if speaker_id:
-                speakers.append(speaker_id)
+                speakers.append(
+                    speaker_id
+                )
 
     return speakers
 
@@ -182,6 +173,20 @@ def load_selected_speakers(
 def load_transcript_file(
     transcript_path: Path,
 ):
+    """
+    Load one speaker's already-normalized transcript file.
+
+    Expected format:
+
+        filename.wav<TAB>normalized transcript
+
+    This function intentionally does NOT modify the transcript text.
+
+    It only:
+        - validates the line structure
+        - separates filename and transcript
+        - removes surrounding whitespace
+    """
 
     entries = []
 
@@ -196,56 +201,92 @@ def load_transcript_file(
             start=1,
         ):
 
-            line = line.rstrip("\n\r")
+            line = line.rstrip(
+                "\n\r"
+            )
 
             if not line.strip():
                 continue
 
+            # --------------------------------------------------------------
+            # TAB delimiter
+            # --------------------------------------------------------------
+
             if "\t" not in line:
 
                 print(
-                    f"WARNING: {transcript_path.name}:"
+                    f"WARNING: "
+                    f"{transcript_path.name}:"
                     f"{line_number}: "
-                    f"no TAB delimiter found; skipping.",
+                    f"no TAB delimiter found; "
+                    f"skipping.",
                     file=sys.stderr,
                 )
 
                 continue
 
-            filename, transcript = line.split(
-                "\t",
-                1,
+            filename, transcript = (
+                line.split(
+                    "\t",
+                    1,
+                )
             )
 
             filename = filename.strip()
             transcript = transcript.strip()
 
+            # --------------------------------------------------------------
+            # Validate filename
+            # --------------------------------------------------------------
+
             if not filename:
+
                 print(
-                    f"WARNING: {transcript_path.name}:"
+                    f"WARNING: "
+                    f"{transcript_path.name}:"
                     f"{line_number}: "
-                    f"empty filename; skipping.",
+                    f"empty filename; "
+                    f"skipping.",
                     file=sys.stderr,
                 )
+
                 continue
+
+            if not filename.lower().endswith(
+                ".wav"
+            ):
+
+                print(
+                    f"WARNING: "
+                    f"{transcript_path.name}:"
+                    f"{line_number}: "
+                    f"filename is not a WAV "
+                    f"file; skipping.",
+                    file=sys.stderr,
+                )
+
+                continue
+
+            # --------------------------------------------------------------
+            # Validate transcript
+            # --------------------------------------------------------------
 
             if not transcript:
+
                 print(
-                    f"WARNING: {transcript_path.name}:"
+                    f"WARNING: "
+                    f"{transcript_path.name}:"
                     f"{line_number}: "
-                    f"empty transcript; skipping.",
+                    f"empty transcript; "
+                    f"skipping.",
                     file=sys.stderr,
                 )
+
                 continue
 
-            if not filename.lower().endswith(".wav"):
-                print(
-                    f"WARNING: {transcript_path.name}:"
-                    f"{line_number}: "
-                    f"filename is not a WAV file; skipping.",
-                    file=sys.stderr,
-                )
-                continue
+            # --------------------------------------------------------------
+            # Keep transcript EXACTLY as provided by normalize_mms.py
+            # --------------------------------------------------------------
 
             entries.append(
                 (
@@ -264,8 +305,19 @@ def load_transcript_file(
 def make_output_filename(
     original_filename: str,
 ) -> str:
+    """
+    Convert:
 
-    path = Path(original_filename)
+        example.wav
+
+    into:
+
+        example.1.wav
+    """
+
+    path = Path(
+        original_filename
+    )
 
     return (
         f"{path.stem}"
@@ -277,31 +329,70 @@ def make_output_filename(
 # TTS
 # ---------------------------------------------------------------------------
 
-def generate_audio(model, tokenizer, text: str, device):
+def generate_audio(
+    model,
+    tokenizer,
+    text: str,
+    device,
+):
+    """
+    Generate audio from an already-normalized MMS transcript.
 
-    normalized_text = normalize_text(text)
+    IMPORTANT:
+        No normalization happens here.
 
-    if not normalized_text:
-        raise ValueError("Transcript became empty after normalization.")
+    The text passed to the tokenizer is exactly the text supplied
+    by normalize_mms.py.
+    """
+
+    if not text.strip():
+
+        raise ValueError(
+            "Transcript is empty."
+        )
+
+    # ------------------------------------------------------------------
+    # Tokenization
+    # ------------------------------------------------------------------
 
     inputs = tokenizer(
-        text=normalized_text,
+        text=text,
         return_tensors="pt",
         normalize=True,
     )
 
-    inputs = {key: value.to(device) for key, value in inputs.items()}
+    inputs = {
+        key: value.to(device)
+        for key, value in inputs.items()
+    }
 
-    # NEW: Set VITS parameters directly on the model object
-    model.speaking_rate = 0.95           # Adjust if it speaks too fast/slow
-    model.noise_scale = 0.333           # Lowers robotic vocal fry/glitches
-    model.noise_scale_duration = 0.4  # Prevents unnatural stretching of syllables
+    # ------------------------------------------------------------------
+    # VITS generation parameters
+    # ------------------------------------------------------------------
+
+    model.speaking_rate = 0.95
+
+    model.noise_scale = 0.333
+
+    model.noise_scale_duration = 0.4
+
+    # ------------------------------------------------------------------
+    # Generate waveform
+    # ------------------------------------------------------------------
 
     with torch.no_grad():
-        output = model(**inputs).waveform
 
-    waveform = output.squeeze().cpu()
-    return waveform, normalized_text
+        output = model(
+            **inputs
+        ).waveform
+
+    waveform = (
+        output
+        .squeeze()
+        .cpu()
+    )
+
+    return waveform
 
 
 # ---------------------------------------------------------------------------
@@ -320,19 +411,28 @@ def main():
     parser.add_argument(
         "--speakers",
         required=True,
-        help="CSV containing selected MMS speakers.",
+        help=(
+            "CSV containing selected MMS "
+            "speakers."
+        ),
     )
 
     parser.add_argument(
         "--transcripts",
         required=True,
-        help="Folder containing one TXT file per speaker.",
+        help=(
+            "Folder containing one already-"
+            "normalized TXT file per speaker."
+        ),
     )
 
     parser.add_argument(
         "--out",
         required=True,
-        help="Output directory for MMS-generated audio.",
+        help=(
+            "Output directory for MMS-generated "
+            "audio."
+        ),
     )
 
     parser.add_argument(
@@ -340,16 +440,25 @@ def main():
         type=int,
         default=None,
         help=(
-            "Maximum number of utterances to generate "
-            "per speaker. Useful for testing."
+            "Maximum number of utterances to "
+            "generate per speaker. Useful for "
+            "testing."
         ),
     )
 
     args = parser.parse_args()
 
-    speakers_path = Path(args.speakers)
-    transcripts_root = Path(args.transcripts)
-    output_root = Path(args.out)
+    speakers_path = Path(
+        args.speakers
+    )
+
+    transcripts_root = Path(
+        args.transcripts
+    )
+
+    output_root = Path(
+        args.out
+    )
 
     # -----------------------------------------------------------------------
     # Validate inputs
@@ -368,7 +477,8 @@ def main():
     if not transcripts_root.exists():
 
         print(
-            f"ERROR: transcript directory not found: "
+            f"ERROR: transcript directory "
+            f"not found: "
             f"{transcripts_root}",
             file=sys.stderr,
         )
@@ -394,15 +504,38 @@ def main():
     print("Meta MMS Cebuano TTS")
     print("=" * 60)
 
-    print(f"Model       : {MODEL_NAME}")
-    print(f"Device      : {device}")
-    print(f"Output rate : {OUTPUT_SAMPLE_RATE} Hz")
-    print(f"Seed        : {SEED}")
-    print(f"Output      : {output_root.resolve()}")
+    print(
+        f"Model       : {MODEL_NAME}"
+    )
+
+    print(
+        f"Device      : {device}"
+    )
+
+    print(
+        f"Output rate : "
+        f"{OUTPUT_SAMPLE_RATE} Hz"
+    )
+
+    print(
+        f"Seed        : {SEED}"
+    )
+
+    print(
+        f"Transcripts : "
+        f"{transcripts_root.resolve()}"
+    )
+
+    print(
+        f"Output      : "
+        f"{output_root.resolve()}"
+    )
 
     if args.limit is not None:
+
         print(
-            f"Test limit  : {args.limit} utterances/speaker"
+            f"Test limit  : "
+            f"{args.limit} utterances/speaker"
         )
 
     print()
@@ -415,18 +548,26 @@ def main():
         f"Loading {MODEL_NAME}..."
     )
 
-    tokenizer = VitsTokenizer.from_pretrained(
-        MODEL_NAME
+    tokenizer = (
+        VitsTokenizer.from_pretrained(
+            MODEL_NAME
+        )
     )
 
-    model = VitsModel.from_pretrained(
-        MODEL_NAME
+    model = (
+        VitsModel.from_pretrained(
+            MODEL_NAME
+        )
     )
 
     model.to(device)
+
     model.eval()
 
-    print("Model loaded.")
+    print(
+        "Model loaded."
+    )
+
     print()
 
     # -----------------------------------------------------------------------
@@ -438,7 +579,8 @@ def main():
     )
 
     print(
-        f"Selected speakers: {len(speakers)}"
+        f"Selected speakers: "
+        f"{len(speakers)}"
     )
 
     print("-" * 60)
@@ -448,8 +590,11 @@ def main():
     # -----------------------------------------------------------------------
 
     total_generated = 0
+
     total_skipped = 0
+
     total_failed = 0
+
     total_missing_transcripts = 0
 
     # -----------------------------------------------------------------------
@@ -468,6 +613,10 @@ def main():
             / speaker_id
         )
 
+        # --------------------------------------------------------------
+        # Missing transcript
+        # --------------------------------------------------------------
+
         if not transcript_path.exists():
 
             print(
@@ -481,26 +630,37 @@ def main():
 
             continue
 
+        # --------------------------------------------------------------
+        # Load transcript
+        # --------------------------------------------------------------
+
         entries = load_transcript_file(
             transcript_path
         )
 
         if args.limit is not None:
-            entries = entries[:args.limit]
+
+            entries = entries[
+                :args.limit
+            ]
 
         print(
             f"[{speaker_id}] "
             f"{len(entries)} utterances"
         )
 
+        # --------------------------------------------------------------
+        # Create output directory
+        # --------------------------------------------------------------
+
         speaker_output_dir.mkdir(
             parents=True,
             exist_ok=True,
         )
 
-        # -------------------------------------------------------------------
+        # --------------------------------------------------------------
         # Generate
-        # -------------------------------------------------------------------
+        # --------------------------------------------------------------
 
         for index, (
             original_filename,
@@ -510,8 +670,10 @@ def main():
             start=1,
         ):
 
-            output_filename = make_output_filename(
-                original_filename
+            output_filename = (
+                make_output_filename(
+                    original_filename
+                )
             )
 
             output_path = (
@@ -519,7 +681,10 @@ def main():
                 / output_filename
             )
 
-            # Resume support.
+            # ----------------------------------------------------------
+            # Resume support
+            # ----------------------------------------------------------
+
             if output_path.exists():
 
                 total_skipped += 1
@@ -528,12 +693,16 @@ def main():
 
             try:
 
-                waveform, normalized_text = generate_audio(
+                waveform = generate_audio(
                     model=model,
                     tokenizer=tokenizer,
                     text=transcript,
                     device=device,
                 )
+
+                # ------------------------------------------------------
+                # Write WAV
+                # ------------------------------------------------------
 
                 sf.write(
                     str(output_path),
@@ -543,8 +712,10 @@ def main():
 
                 total_generated += 1
 
-                # Print first few examples so we can inspect
-                # exactly what MMS received.
+                # ------------------------------------------------------
+                # Show first few examples
+                # ------------------------------------------------------
+
                 if index <= 3:
 
                     print(
@@ -552,18 +723,18 @@ def main():
                     )
 
                     print(
-                        f"    File      : "
+                        f"    File       : "
                         f"{original_filename}"
                     )
 
                     print(
-                        f"    Original  : "
+                        f"    MMS input  : "
                         f"{transcript}"
                     )
 
                     print(
-                        f"    Normalized: "
-                        f"{normalized_text}"
+                        f"    Output     : "
+                        f"{output_filename}"
                     )
 
             except Exception as e:
@@ -571,12 +742,14 @@ def main():
                 total_failed += 1
 
                 print(
-                    f"\nFAILED [{speaker_id}] "
+                    f"\nFAILED "
+                    f"[{speaker_id}] "
                     f"{original_filename}"
                 )
 
                 print(
-                    f"  Transcript: {transcript}"
+                    f"  Transcript: "
+                    f"{transcript}"
                 )
 
                 print(
@@ -584,17 +757,25 @@ def main():
                     file=sys.stderr,
                 )
 
+            # ----------------------------------------------------------
+            # Progress
+            # ----------------------------------------------------------
+
             if (
                 index % 100 == 0
                 or index == len(entries)
             ):
 
                 print(
-                    f"  {index}/{len(entries)} "
+                    f"  {index}/"
+                    f"{len(entries)} "
                     f"processed "
-                    f"({total_generated} generated, "
-                    f"{total_skipped} skipped, "
-                    f"{total_failed} failed)"
+                    f"({total_generated} "
+                    f"generated, "
+                    f"{total_skipped} "
+                    f"skipped, "
+                    f"{total_failed} "
+                    f"failed)"
                 )
 
     # -----------------------------------------------------------------------
@@ -602,8 +783,11 @@ def main():
     # -----------------------------------------------------------------------
 
     print()
+
     print("=" * 60)
+
     print("DONE")
+
     print("=" * 60)
 
     print(
