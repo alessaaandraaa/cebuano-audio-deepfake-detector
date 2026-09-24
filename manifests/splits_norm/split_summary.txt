@@ -13,28 +13,28 @@ Total speakers       : 140
 TRAIN
 ----------------------------------------------------------------------
   speakers   : 98
-  clips      : 78710
+  clips      : 78702
   gender     : female=57 (58.2%), male=41 (41.8%)
-  labels     : bonafide=39351, spoof=39359
-  spoof src  : elevenlabs=19064, meta-mms=20295, none=39351
+  labels     : bonafide=39351, spoof=39351
+  spoof src  : elevenlabs=19056, meta-mms=20295, none=39351
 
 ----------------------------------------------------------------------
 VAL
 ----------------------------------------------------------------------
   speakers   : 21
-  clips      : 16964
+  clips      : 16606
   gender     : female=12 (57.1%), male=9 (42.9%)
-  labels     : bonafide=8303, spoof=8661
-  spoof src  : elevenlabs=4553, meta-mms=4108, none=8303
+  labels     : bonafide=8303, spoof=8303
+  spoof src  : elevenlabs=4552, meta-mms=3751, none=8303
 
 ----------------------------------------------------------------------
 TEST
 ----------------------------------------------------------------------
   speakers   : 21
-  clips      : 17265
+  clips      : 17264
   gender     : female=12 (57.1%), male=9 (42.9%)
-  labels     : bonafide=8632, spoof=8633
-  spoof src  : elevenlabs=4499, meta-mms=4134, none=8632
+  labels     : bonafide=8632, spoof=8632
+  spoof src  : elevenlabs=4498, meta-mms=4134, none=8632
 
 ======================================================================
 LEAKAGE CHECK

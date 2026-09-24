@@ -91,11 +91,78 @@ Speaker-disjoint, gender-stratified 70/15/15. Writes **absolute
 paths**, so it must run on the machine that will train.
 
 ```powershell
-python training\build_manifests.py --bonafide-root data\normalised\bonafide --spoof-root meta-mms=data\normalised\meta-mms --spoof-root elevenlabs=data\normalised\elevenlabs --speaker-manifest manifests\manifest_bonafide.csv --out manifests\splits_norm
+python training\build_manifests.py --bonafide-root data\normalised\bonafide --spoof-root meta-mms=data\normalised\meta-mms --spoof-root elevenlabs=data\normalised\elevenlabs --speaker-manifest manifests\manifest_bonafide.csv --out manifests\splits_norm --unpaired-report manifests\splits_norm\unpaired_excluded.csv
 ```
 
 Read `manifests\splits_norm\split_summary.txt` and confirm the leakage
 check says `speaker-disjoint`.
+
+#### The pairing guard
+
+This corpus is a **paired** design: every spoof clip is generated from
+the text of a specific bonafide utterance, so the two classes differ in
+synthesis and not in what is being said. That control is the main
+defence against the detector learning *content* instead of artefacts.
+Dao et al. ("Linguistic Bias Mitigation for Spoofing Detection") needed
+a gradient-reversal architecture to recover a property this corpus has
+by construction -- worth protecting.
+
+A spoof clip whose bonafide counterpart is missing breaks it: it puts a
+sentence into one class only, and it cannot take part in the paired
+comparison it exists for. The guard drops those. It is **on by
+default** and prints exactly what it removed.
+
+Expected output on the current corpus:
+
+```
+Pairing guard: excluded 367 of 56653 spoof clips (0.65%) with no bonafide counterpart.
+    meta-mms        357   across 1 speaker(s)
+                        0268:357
+    elevenlabs       10   across 10 speaker(s)
+```
+
+Leaving 56,286 bonafide and 56,286 spoof -- exactly 1:1.
+
+**Anything other than 367 means something changed upstream.** Stop and
+find out what before training.
+
+The two groups have different causes, both written up in
+`METHODOLOGY_AUDIT.md` finding 3.1:
+
+- **357 Meta MMS clips, speaker 0268.** Generation is transcript-driven
+  while the bonafide set is filesystem-driven. Speaker 0268 has 451
+  transcript lines but only 94 clips survived the inventory, so MMS
+  synthesised 357 utterances whose originals were never in the corpus.
+  All 357 landed in **val**, which is the split that drives early
+  stopping and threshold calibration -- the worst place for them.
+- **10 ElevenLabs clips.** `generate_elevenlabs.py:720-728` skips
+  voice-cloning reference clips; `regenerate_elevenlabs.py` has no such
+  check. These are clones of reference utterances that were
+  deliberately withheld (270 of them, now in `elevenlabs-reference\`).
+
+Flags:
+
+| flag | default | what it does |
+|---|---|---|
+| `--unpaired-report PATH` | off | CSV listing every excluded clip, for the appendix |
+| `--max-unpaired-frac F` | `0.05` | abort if more than this fraction is unpaired |
+| `--allow-unpaired` | off | keep unpaired clips anyway (warns loudly) |
+
+`--max-unpaired-frac` is the safety net, not a tuning knob. Past 5% the
+likeliest explanation is that the spoof filename convention changed,
+and silently discarding most of the spoof class would do far more
+damage than stopping. Spoof files are expected to be named
+`<bonafide-stem>.<digit>.wav` -- `.1` for Meta MMS, `.2` for
+ElevenLabs. Bonafide stems end in a four-digit utterance number, so
+stripping one trailing `.<digit>` recovers the counterpart and can
+never truncate a bonafide stem.
+
+For the write-up, the exclusion reads:
+
+> Spoof clips without a corresponding bona fide utterance were
+> excluded, as the paired design requires each synthetic clip to have a
+> genuine counterpart with identical text. This removed 367 clips
+> (0.32% of the corpus).
 
 ### 3. Measure the shortcut floor
 
