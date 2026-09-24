@@ -82,6 +82,7 @@ Usage:
 import argparse
 import csv
 import random
+import re
 import sys
 from collections import Counter, defaultdict
 from pathlib import Path
@@ -189,6 +190,123 @@ def collect_clips(
             )
 
     return by_speaker
+
+
+# ---------------------------------------------------------------------------
+# PAIRING GUARD
+# ---------------------------------------------------------------------------
+#
+# This corpus is a PAIRED design: every spoof clip is generated from the
+# text of a specific bonafide utterance, so the two classes differ in
+# synthesis and not in what is being said. That control is the main
+# defence against a detector learning CONTENT rather than artefacts --
+# see Dao et al., "Linguistic Bias Mitigation for Spoofing Detection",
+# who needed a gradient-reversal architecture to recover a property this
+# corpus has by construction.
+#
+# A spoof clip whose bonafide counterpart is missing breaks it. It puts a
+# sentence into one class only, and it cannot take part in the paired
+# comparison it exists for. Worse, it does so invisibly: nothing in the
+# split summary or the training logs will ever mention it.
+#
+# Spoof filenames carry a single-digit synthesis suffix before the
+# extension -- <bonafide-stem>.1.wav for Meta MMS, .2.wav for ElevenLabs.
+# Bonafide stems end in a FOUR-digit utterance number (0200.111020.
+# 092714.0007), so stripping exactly one trailing ".<digit>" recovers the
+# counterpart and can never truncate a bonafide stem.
+
+SPOOF_SUFFIX_RE = re.compile(r"\.\d$")
+
+
+def bonafide_stem_for(spoof_stem: str) -> str:
+    """Stem of the bonafide clip a spoof clip was generated from."""
+    return SPOOF_SUFFIX_RE.sub("", spoof_stem)
+
+
+def enforce_pairing(clips_by_speaker: dict, max_unpaired_frac: float):
+    """
+    Drop spoof clips with no bonafide counterpart for the same speaker.
+
+    Mutates clips_by_speaker. Returns (n_spoof_seen, excluded_rows).
+
+    Matching is per speaker, not global, so a stem collision across
+    speakers cannot silently pair a clip with the wrong original.
+
+    Exits if the unpaired fraction exceeds max_unpaired_frac. Past that
+    point the likeliest explanation is that the filename convention
+    changed, and silently discarding most of the spoof class would do
+    far more damage than stopping.
+    """
+    excluded = []
+    n_spoof = 0
+
+    for speaker, rows in clips_by_speaker.items():
+        bona = {r["ID"] for r in rows if r["label"] == LABEL_BONAFIDE}
+
+        kept = []
+
+        for row in rows:
+            if row["label"] != LABEL_SPOOF:
+                kept.append(row)
+                continue
+
+            n_spoof += 1
+
+            if bonafide_stem_for(row["ID"]) in bona:
+                kept.append(row)
+            else:
+                excluded.append(row)
+
+        clips_by_speaker[speaker] = kept
+
+    if n_spoof and len(excluded) / n_spoof > max_unpaired_frac:
+        pct = 100.0 * len(excluded) / n_spoof
+        print(
+            f"ERROR: {len(excluded)} of {n_spoof} spoof clips ({pct:.1f}%)"
+            " have no bonafide counterpart, above the"
+            f" {100 * max_unpaired_frac:.1f}% limit.\n"
+            "       This is far more likely to be a filename-convention"
+            " mismatch than a real orphan problem.\n"
+            "       Expected spoof naming: <bonafide-stem>.<digit>.wav\n"
+            "       If the exclusion really is this large, raise"
+            " --max-unpaired-frac deliberately.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    return n_spoof, excluded
+
+
+def report_unpaired(excluded: list, n_spoof: int, report_path):
+    """Print the exclusion breakdown; optionally write the full list."""
+    if not excluded:
+        print("Pairing guard: every spoof clip has a bonafide counterpart.")
+        return
+
+    pct = 100.0 * len(excluded) / n_spoof if n_spoof else 0.0
+
+    print(
+        f"Pairing guard: excluded {len(excluded)} of {n_spoof} spoof clips"
+        f" ({pct:.2f}%) with no bonafide counterpart."
+    )
+
+    by_method = Counter(r["spoof_method"] for r in excluded)
+
+    for method, n in by_method.most_common():
+        speakers = Counter(
+            r["speaker_id"] for r in excluded if r["spoof_method"] == method
+        )
+        head = ", ".join(f"{s}:{c}" for s, c in speakers.most_common(5))
+        more = " ..." if len(speakers) > 5 else ""
+        print(f"    {method:12} {n:6}  across {len(speakers)} speaker(s)")
+        print(f"                        {head}{more}")
+
+    if report_path is not None:
+        report_path.parent.mkdir(parents=True, exist_ok=True)
+        pd.DataFrame(excluded).sort_values(
+            ["spoof_method", "speaker_id", "ID"]
+        ).to_csv(report_path, index=False)
+        print(f"    full list: {report_path}")
 
 
 # ---------------------------------------------------------------------------
@@ -411,6 +529,33 @@ def main():
         help="Use only the first N clips per speaker (smoke testing)",
     )
 
+    parser.add_argument(
+        "--allow-unpaired",
+        action="store_true",
+        help=(
+            "Keep spoof clips that have no bonafide counterpart. Off by "
+            "default: the paired design is what rules out the detector "
+            "learning content instead of synthesis artefacts."
+        ),
+    )
+
+    parser.add_argument(
+        "--max-unpaired-frac",
+        type=float,
+        default=0.05,
+        help=(
+            "Abort if more than this fraction of spoof clips are unpaired "
+            "(default 0.05). Exceeding it almost always means the filename "
+            "convention changed, not that the data is bad."
+        ),
+    )
+
+    parser.add_argument(
+        "--unpaired-report",
+        default=None,
+        help="Write the list of excluded clips to this CSV for the record.",
+    )
+
     args = parser.parse_args()
 
     bonafide_root = Path(args.bonafide_root)
@@ -457,6 +602,27 @@ def main():
 
         for speaker, rows in spoof.items():
             clips_by_speaker[speaker].extend(rows)
+
+    # -----------------------------------------------------------------
+    # Pairing guard
+    # -----------------------------------------------------------------
+
+    if args.allow_unpaired:
+        print(
+            "WARNING: pairing guard disabled (--allow-unpaired). Spoof "
+            "clips with no bonafide counterpart will be included, which "
+            "reintroduces a content confound.",
+            file=sys.stderr,
+        )
+    else:
+        n_spoof_seen, unpaired = enforce_pairing(
+            clips_by_speaker, args.max_unpaired_frac
+        )
+        report_unpaired(
+            unpaired,
+            n_spoof_seen,
+            Path(args.unpaired_report) if args.unpaired_report else None,
+        )
 
     speakers = sorted(s for s in clips_by_speaker if s in speaker_gender)
 

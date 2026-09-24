@@ -250,3 +250,6 @@ probe_*.parquet
 #                   record for every number in the thesis. Track them.
 #   training/       all the pipeline code.
 #   *.md            the audit and methodology notes.
+
+# editor / script backups
+*.bak
