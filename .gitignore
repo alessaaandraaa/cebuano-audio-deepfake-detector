@@ -222,3 +222,31 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# ---------------------------------------------------------------------------
+# PROJECT ARTEFACTS  (added after the 18 GB outputs/ near-miss)
+# ---------------------------------------------------------------------------
+
+# Training runs. Each checkpoint is ~3.8 GB, because the file carries
+# the Adam optimiser state alongside the 300M-parameter model, and the
+# trainer writes one on EVERY validation improvement. Two short test
+# runs already put 18 GB here. A 30-epoch run can add 40-60 GB.
+#
+# Keep the train.log / results.json from runs you care about by copying
+# them somewhere tracked -- they are a few KB and they are the only
+# record of the loss trajectory.
+outputs/
+
+# Belt and braces: a checkpoint is never committable, wherever it lands.
+*.pth
+*.pt
+*.ckpt
+
+# Probe feature caches (regenerable, tens of MB).
+probe_*.parquet
+
+# NOT ignored, deliberately:
+#   manifests/      26 MB, and the exact splits are the reproducibility
+#                   record for every number in the thesis. Track them.
+#   training/       all the pipeline code.
+#   *.md            the audit and methodology notes.
