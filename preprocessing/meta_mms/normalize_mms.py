@@ -72,7 +72,9 @@ IMPORTANT:
 
 Usage:
 
-    python preprocessing/meta_mms/normalize_mms.py --root transcripts --out transcripts_mms
+    python preprocessing/meta_mms/normalize_mms.py \
+        --root transcripts \
+        --out transcripts_mms
 """
 
 import argparse
@@ -82,7 +84,6 @@ import re
 import sys
 import unicodedata
 from pathlib import Path
-
 
 # ---------------------------------------------------------------------------
 # DEFAULT PATHS
@@ -113,14 +114,14 @@ DEFAULT_MANIFEST_PATH = (
 )
 
 DEFAULT_MAPPING_PATH = (
-    Path(__file__).resolve().parents[1]
-    / "ceb_english_mapping.json"
+    Path(__file__).resolve().parents[1] / "ceb_english_mapping.json"
 )
 
 
 # ---------------------------------------------------------------------------
 # PHONETIC MAPPING
 # ---------------------------------------------------------------------------
+
 
 def load_phonetic_map(
     mapping_path: Path,
@@ -139,8 +140,7 @@ def load_phonetic_map(
     if not mapping_path.exists():
 
         print(
-            f"ERROR: phonetic mapping not found:\n"
-            f"  {mapping_path}",
+            f"ERROR: phonetic mapping not found:\n  {mapping_path}",
             file=sys.stderr,
         )
 
@@ -159,7 +159,7 @@ def load_phonetic_map(
     except Exception as e:
 
         print(
-            f"ERROR: failed to load phonetic mapping:\n"
+            "ERROR: failed to load phonetic mapping:\n"
             f"  {mapping_path}\n"
             f"  {e}",
             file=sys.stderr,
@@ -182,6 +182,7 @@ def load_phonetic_map(
 # ---------------------------------------------------------------------------
 # PHONETIC MAP LOOKUP
 # ---------------------------------------------------------------------------
+
 
 def build_normalized_mapping(
     phonetic_map: dict,
@@ -210,9 +211,7 @@ def build_normalized_mapping(
         if not isinstance(value, str):
             continue
 
-        normalized_key = normalize_lookup_key(
-            key
-        )
+        normalized_key = normalize_lookup_key(key)
 
         if normalized_key:
             normalized_map[normalized_key] = value
@@ -283,15 +282,11 @@ def lookup_phonetic_mapping(
     # Normalized match
     # --------------------------------------------------------------
 
-    normalized_key = normalize_lookup_key(
-        text
-    )
+    normalized_key = normalize_lookup_key(text)
 
     if normalized_key in normalized_map:
 
-        value = normalized_map[
-            normalized_key
-        ]
+        value = normalized_map[normalized_key]
 
         if isinstance(value, str) and value.strip():
 
@@ -307,10 +302,7 @@ def lookup_phonetic_mapping(
 
         if key.casefold() == lowered_key:
 
-            if (
-                isinstance(value, str)
-                and value.strip()
-            ):
+            if isinstance(value, str) and value.strip():
 
                 return value
 
@@ -320,6 +312,7 @@ def lookup_phonetic_mapping(
 # ---------------------------------------------------------------------------
 # MMS SPEAKER MANIFEST
 # ---------------------------------------------------------------------------
+
 
 def load_selected_speakers(
     manifest_path: Path,
@@ -341,8 +334,7 @@ def load_selected_speakers(
     if not manifest_path.exists():
 
         print(
-            f"ERROR: MMS speaker manifest not found:\n"
-            f"  {manifest_path}",
+            f"ERROR: MMS speaker manifest not found:\n  {manifest_path}",
             file=sys.stderr,
         )
 
@@ -375,26 +367,20 @@ def load_selected_speakers(
                     continue
 
                 # Optional header.
-                if (
-                    line_number == 1
-                    and speaker_id.lower()
-                    in {
-                        "speaker_id",
-                        "speaker",
-                        "id",
-                    }
-                ):
+                if line_number == 1 and speaker_id.lower() in {
+                    "speaker_id",
+                    "speaker",
+                    "id",
+                }:
                     continue
 
-                speakers.append(
-                    speaker_id
-                )
+                speakers.append(speaker_id)
 
     except Exception as e:
 
         print(
-            f"ERROR: failed to read MMS speaker "
-            f"manifest:\n"
+            "ERROR: failed to read MMS speaker "
+            "manifest:\n"
             f"  {manifest_path}\n"
             f"  {e}",
             file=sys.stderr,
@@ -403,17 +389,12 @@ def load_selected_speakers(
         sys.exit(1)
 
     # Remove duplicates while preserving order.
-    speakers = list(
-        dict.fromkeys(
-            speakers
-        )
-    )
+    speakers = list(dict.fromkeys(speakers))
 
     if not speakers:
 
         print(
-            f"ERROR: no speakers found in:\n"
-            f"  {manifest_path}",
+            f"ERROR: no speakers found in:\n  {manifest_path}",
             file=sys.stderr,
         )
 
@@ -425,6 +406,7 @@ def load_selected_speakers(
 # ---------------------------------------------------------------------------
 # DIACRITIC REMOVAL
 # ---------------------------------------------------------------------------
+
 
 def remove_diacritics(
     text: str,
@@ -454,16 +436,13 @@ def remove_diacritics(
         text,
     )
 
-    return "".join(
-        char
-        for char in text
-        if not unicodedata.combining(char)
-    )
+    return "".join(char for char in text if not unicodedata.combining(char))
 
 
 # ---------------------------------------------------------------------------
 # MMS NORMALIZATION
 # ---------------------------------------------------------------------------
+
 
 def normalize_mms_text(
     text: str,
@@ -500,9 +479,7 @@ def normalize_mms_text(
         normalized_map=normalized_map,
     )
 
-    mapping_applied = (
-        mapped_text is not None
-    )
+    mapping_applied = mapped_text is not None
 
     if mapped_text is not None:
 
@@ -523,9 +500,7 @@ def normalize_mms_text(
     # 2. REMOVE DIACRITICS
     # --------------------------------------------------------------
 
-    text = remove_diacritics(
-        text
-    )
+    text = remove_diacritics(text)
 
     # --------------------------------------------------------------
     # 3. LOWERCASE
@@ -564,6 +539,7 @@ def normalize_mms_text(
 # FILE PROCESSING
 # ---------------------------------------------------------------------------
 
+
 def normalize_file(
     input_path: Path,
     output_path: Path,
@@ -597,9 +573,7 @@ def normalize_file(
             start=1,
         ):
 
-            line = line.rstrip(
-                "\n\r"
-            )
+            line = line.rstrip("\n\r")
 
             if not line.strip():
                 continue
@@ -615,8 +589,8 @@ def normalize_file(
                 print(
                     f"WARNING: {input_path.name}:"
                     f"{line_number}: "
-                    f"no TAB separator; "
-                    f"skipping line",
+                    "no TAB separator; "
+                    "skipping line",
                     file=sys.stderr,
                 )
 
@@ -634,19 +608,17 @@ def normalize_file(
                 print(
                     f"WARNING: {input_path.name}:"
                     f"{line_number}: "
-                    f"empty filename; "
-                    f"skipping line",
+                    "empty filename; "
+                    "skipping line",
                     file=sys.stderr,
                 )
 
                 continue
 
-            normalized, mapping_applied = (
-                normalize_mms_text(
-                    text=text,
-                    phonetic_map=phonetic_map,
-                    normalized_map=normalized_map,
-                )
+            normalized, mapping_applied = normalize_mms_text(
+                text=text,
+                phonetic_map=phonetic_map,
+                normalized_map=normalized_map,
             )
 
             if mapping_applied:
@@ -655,9 +627,9 @@ def normalize_file(
 
                 print(
                     f"  MAPPING [{filename}]"
-                    f"\n"
+                    "\n"
                     f"    Original : {text.strip()}"
-                    f"\n"
+                    "\n"
                     f"    Result   : {normalized}"
                 )
 
@@ -666,16 +638,14 @@ def normalize_file(
                 print(
                     f"WARNING: {input_path.name}:"
                     f"{line_number}: "
-                    f"text became empty "
-                    f"after MMS normalization",
+                    "text became empty "
+                    "after MMS normalization",
                     file=sys.stderr,
                 )
 
                 continue
 
-            normalized_lines.append(
-                f"{filename}\t{normalized}"
-            )
+            normalized_lines.append(f"{filename}\t{normalized}")
 
     if not normalized_lines:
 
@@ -695,11 +665,7 @@ def normalize_file(
         encoding="utf-8",
     ) as f:
 
-        f.write(
-            "\n".join(
-                normalized_lines
-            )
-        )
+        f.write("\n".join(normalized_lines))
 
         f.write("\n")
 
@@ -713,71 +679,46 @@ def normalize_file(
 # MAIN
 # ---------------------------------------------------------------------------
 
+
 def main():
 
     parser = argparse.ArgumentParser(
-        description=(
-            "Normalize only MMS-selected "
-            "speaker transcripts."
-        )
+        description="Normalize only MMS-selected speaker transcripts."
     )
 
     parser.add_argument(
         "--root",
         required=True,
-        help=(
-            "Input folder containing one .txt "
-            "file per speaker."
-        ),
+        help="Input folder containing one .txt file per speaker.",
     )
 
     parser.add_argument(
         "--out",
         required=True,
-        help=(
-            "Output folder for MMS-normalized "
-            "transcripts."
-        ),
+        help="Output folder for MMS-normalized transcripts.",
     )
 
     parser.add_argument(
         "--manifest",
-        default=str(
-            DEFAULT_MANIFEST_PATH
-        ),
-        help=(
-            "CSV containing the selected MMS "
-            "speakers."
-        ),
+        default=str(DEFAULT_MANIFEST_PATH),
+        help="CSV containing the selected MMS speakers.",
     )
 
     parser.add_argument(
         "--mapping",
-        default=str(
-            DEFAULT_MAPPING_PATH
-        ),
-        help=(
-            "Path to ceb_english_mapping.json."
-        ),
+        default=str(DEFAULT_MAPPING_PATH),
+        help="Path to ceb_english_mapping.json.",
     )
 
     args = parser.parse_args()
 
-    root = Path(
-        args.root
-    )
+    root = Path(args.root)
 
-    out_root = Path(
-        args.out
-    )
+    out_root = Path(args.out)
 
-    manifest_path = Path(
-        args.manifest
-    )
+    manifest_path = Path(args.manifest)
 
-    mapping_path = Path(
-        args.mapping
-    )
+    mapping_path = Path(args.mapping)
 
     # ------------------------------------------------------------------
     # Validate input
@@ -786,8 +727,7 @@ def main():
     if not root.exists():
 
         print(
-            f"ERROR: input folder not found: "
-            f"{root}",
+            f"ERROR: input folder not found: {root}",
             file=sys.stderr,
         )
 
@@ -796,8 +736,7 @@ def main():
     if not root.is_dir():
 
         print(
-            f"ERROR: input path is not a directory: "
-            f"{root}",
+            f"ERROR: input path is not a directory: {root}",
             file=sys.stderr,
         )
 
@@ -807,25 +746,15 @@ def main():
     # Load MMS speakers
     # ------------------------------------------------------------------
 
-    selected_speakers = (
-        load_selected_speakers(
-            manifest_path
-        )
-    )
+    selected_speakers = load_selected_speakers(manifest_path)
 
     # ------------------------------------------------------------------
     # Load mapping
     # ------------------------------------------------------------------
 
-    phonetic_map = load_phonetic_map(
-        mapping_path
-    )
+    phonetic_map = load_phonetic_map(mapping_path)
 
-    normalized_map = (
-        build_normalized_mapping(
-            phonetic_map
-        )
-    )
+    normalized_map = build_normalized_mapping(phonetic_map)
 
     # ------------------------------------------------------------------
     # Find selected speaker transcripts
@@ -837,69 +766,39 @@ def main():
 
     for speaker_id in selected_speakers:
 
-        input_path = (
-            root
-            / f"{speaker_id}.txt"
-        )
+        input_path = root / f"{speaker_id}.txt"
 
         if not input_path.exists():
 
-            missing_speakers.append(
-                speaker_id
-            )
+            missing_speakers.append(speaker_id)
 
             continue
 
         if not input_path.is_file():
 
-            missing_speakers.append(
-                speaker_id
-            )
+            missing_speakers.append(speaker_id)
 
             continue
 
-        selected_files.append(
-            input_path
-        )
+        selected_files.append(input_path)
 
     # ------------------------------------------------------------------
     # Summary
     # ------------------------------------------------------------------
 
-    print(
-        f"Input folder       : "
-        f"{root.resolve()}"
-    )
+    print(f"Input folder       : {root.resolve()}")
 
-    print(
-        f"Output folder      : "
-        f"{out_root.resolve()}"
-    )
+    print(f"Output folder      : {out_root.resolve()}")
 
-    print(
-        f"MMS speaker CSV    : "
-        f"{manifest_path.resolve()}"
-    )
+    print(f"MMS speaker CSV    : {manifest_path.resolve()}")
 
-    print(
-        f"Phonetic mapping   : "
-        f"{mapping_path.resolve()}"
-    )
+    print(f"Phonetic mapping   : {mapping_path.resolve()}")
 
-    print(
-        f"Mapping entries    : "
-        f"{len(phonetic_map)}"
-    )
+    print(f"Mapping entries    : {len(phonetic_map)}")
 
-    print(
-        f"Speakers selected  : "
-        f"{len(selected_speakers)}"
-    )
+    print(f"Speakers selected  : {len(selected_speakers)}")
 
-    print(
-        f"Transcripts found  : "
-        f"{len(selected_files)}"
-    )
+    print(f"Transcripts found  : {len(selected_files)}")
 
     print("-" * 60)
 
@@ -910,8 +809,7 @@ def main():
     if missing_speakers:
 
         print(
-            "WARNING: selected MMS speakers "
-            "without transcripts:",
+            "WARNING: selected MMS speakers without transcripts:",
             file=sys.stderr,
         )
 
@@ -922,9 +820,7 @@ def main():
                 file=sys.stderr,
             )
 
-        print(
-            "-" * 60
-        )
+        print("-" * 60)
 
     # ------------------------------------------------------------------
     # Process ONLY selected speakers
@@ -935,10 +831,7 @@ def main():
 
     for input_path in selected_files:
 
-        output_path = (
-            out_root
-            / input_path.name
-        )
+        output_path = out_root / input_path.name
 
         (
             count,
@@ -968,35 +861,17 @@ def main():
 
     print("Done.")
 
-    print(
-        f"Speakers selected        : "
-        f"{len(selected_speakers)}"
-    )
+    print(f"Speakers selected        : {len(selected_speakers)}")
 
-    print(
-        f"Speaker files processed  : "
-        f"{len(selected_files)}"
-    )
+    print(f"Speaker files processed  : {len(selected_files)}")
 
-    print(
-        f"Missing transcripts      : "
-        f"{len(missing_speakers)}"
-    )
+    print(f"Missing transcripts      : {len(missing_speakers)}")
 
-    print(
-        f"Utterances normalized    : "
-        f"{total_utterances}"
-    )
+    print(f"Utterances normalized    : {total_utterances}")
 
-    print(
-        f"Phonetic mappings applied: "
-        f"{total_mappings}"
-    )
+    print(f"Phonetic mappings applied: {total_mappings}")
 
-    print(
-        f"Output folder            : "
-        f"{out_root.resolve()}"
-    )
+    print(f"Output folder            : {out_root.resolve()}")
 
 
 if __name__ == "__main__":

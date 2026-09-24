@@ -1,4 +1,4 @@
-"""
+r"""
 inventory_bonafide.py
 
 Scans a bonafide audio dataset organized as:
@@ -20,7 +20,9 @@ The manifest contains one row per INCLUDED audio clip and is labeled
 label=bonafide automatically.
 
 Usage:
-    python preprocessing\\inventory_bonafide.py --root "C:\\path\\to\\bonafide" --out manifests\\manifest_bonafide.csv
+    python preprocessing\inventory_bonafide.py \
+        --root "C:\path\to\bonafide" \
+        --out manifests\manifest_bonafide.csv
 """
 
 import argparse
@@ -178,8 +180,7 @@ def should_exclude_source(source_file: str) -> bool:
     """Returns True if a transcript source should be excluded."""
 
     return any(
-        source_file.startswith(prefix)
-        for prefix in EXCLUDE_SOURCE_PREFIXES
+        source_file.startswith(prefix) for prefix in EXCLUDE_SOURCE_PREFIXES
     )
 
 
@@ -191,10 +192,7 @@ def scan_dataset(root: Path):
     excluded_source_count = 0
     excluded_source_files = []
 
-    speaker_dirs = sorted(
-        d for d in root.iterdir()
-        if d.is_dir()
-    )
+    speaker_dirs = sorted(d for d in root.iterdir() if d.is_dir())
 
     if not speaker_dirs:
         print(
@@ -221,15 +219,14 @@ def scan_dataset(root: Path):
             print(
                 f"NOTE: folder '{speaker_id}' != "
                 f"log SpeakerID '{logged_id}' "
-                f"(using folder name as canonical id)",
+                "(using folder name as canonical id)",
                 file=sys.stderr,
             )
 
         audio_files = [
             f
             for f in speaker_dir.rglob("*")
-            if f.suffix.lower() in AUDIO_EXTENSIONS
-            and f.is_file()
+            if f.suffix.lower() in AUDIO_EXTENSIONS and f.is_file()
         ]
 
         for f in audio_files:
@@ -243,7 +240,7 @@ def scan_dataset(root: Path):
             if source_file is None:
                 print(
                     f"WARNING: [{speaker_id}] {f.name} "
-                    f"has no transcript source in .log",
+                    "has no transcript source in .log",
                     file=sys.stderr,
                 )
 
@@ -260,8 +257,7 @@ def scan_dataset(root: Path):
                 )
 
                 print(
-                    f"EXCLUDED [{speaker_id}] "
-                    f"{f.name} | source={source_file}",
+                    f"EXCLUDED [{speaker_id}] {f.name} | source={source_file}",
                 )
 
                 continue
@@ -307,7 +303,7 @@ def scan_dataset(root: Path):
     if missing_logs:
         print(
             f"\nWARNING: {len(missing_logs)} speaker folder(s) "
-            f"had no .log file: "
+            "had no .log file: "
             f"{missing_logs[:10]}"
             f"{'...' if len(missing_logs) > 10 else ''}",
             file=sys.stderr,
@@ -361,22 +357,13 @@ def print_summary(
     root: Path,
 ):
 
-    speakers = sorted(
-        set(r["speaker_id"] for r in rows)
-    )
+    speakers = sorted(set(r["speaker_id"] for r in rows))
 
-    total_duration_hr = (
-        sum(r["duration_sec"] for r in rows)
-        / 3600
-    )
+    total_duration_hr = sum(r["duration_sec"] for r in rows) / 3600
 
-    sample_rates = sorted(
-        set(r["sample_rate"] for r in rows)
-    )
+    sample_rates = sorted(set(r["sample_rate"] for r in rows))
 
-    channels = sorted(
-        set(r["channels"] for r in rows)
-    )
+    channels = sorted(set(r["channels"] for r in rows))
 
     print()
     print("=" * 60)
@@ -401,24 +388,17 @@ def print_summary(
 
     if len(channels) > 1:
         print(
-            "⚠ Mixed mono/stereo detected — "
-            "convert to mono for consistency."
+            "⚠ Mixed mono/stereo detected — convert to mono for consistency."
         )
 
     if excluded_source_files:
         print("\nTGL exclusions:")
 
         for speaker_id, filename, source_file in excluded_source_files[:10]:
-            print(
-                f"  [{speaker_id}] {filename} "
-                f"({source_file})"
-            )
+            print(f"  [{speaker_id}] {filename} ({source_file})")
 
         if len(excluded_source_files) > 10:
-            print(
-                f"  ... and "
-                f"{len(excluded_source_files) - 10} more"
-            )
+            print(f"  ... and {len(excluded_source_files) - 10} more")
 
     if errors:
         print("\nFirst few failed files:")
@@ -426,10 +406,7 @@ def print_summary(
         for path, err in errors[:5]:
             print(f"  {path}: {err}")
 
-    counts = Counter(
-        r["speaker_id"]
-        for r in rows
-    )
+    counts = Counter(r["speaker_id"] for r in rows)
 
     counts_sorted = sorted(
         counts.items(),
@@ -449,40 +426,24 @@ def print_summary(
     speaker_gender = {}
 
     for r in rows:
-        if (
-            r["speaker_id"] not in speaker_gender
-            and r.get("speaker_gender")
-        ):
+        if r["speaker_id"] not in speaker_gender and r.get("speaker_gender"):
             speaker_gender[r["speaker_id"]] = r["speaker_gender"]
 
-    gender_counts = Counter(
-        speaker_gender.values()
-    )
+    gender_counts = Counter(speaker_gender.values())
 
     if gender_counts:
-        print(
-            f"\nSpeaker gender breakdown: "
-            f"{dict(gender_counts)}"
-        )
+        print(f"\nSpeaker gender breakdown: {dict(gender_counts)}")
 
     speaker_dialect = {}
 
     for r in rows:
-        if (
-            r["speaker_id"] not in speaker_dialect
-            and r.get("speaker_dialect")
-        ):
+        if r["speaker_id"] not in speaker_dialect and r.get("speaker_dialect"):
             speaker_dialect[r["speaker_id"]] = r["speaker_dialect"]
 
-    dialect_counts = Counter(
-        speaker_dialect.values()
-    )
+    dialect_counts = Counter(speaker_dialect.values())
 
     if dialect_counts:
-        print(
-            f"Speaker dialect breakdown: "
-            f"{dict(dialect_counts)}"
-        )
+        print(f"Speaker dialect breakdown: {dict(dialect_counts)}")
 
 
 def main():
@@ -534,10 +495,7 @@ def main():
         root,
     )
 
-    print(
-        f"\nManifest written to: "
-        f"{Path(args.out).resolve()}"
-    )
+    print(f"\nManifest written to: {Path(args.out).resolve()}")
 
 
 if __name__ == "__main__":

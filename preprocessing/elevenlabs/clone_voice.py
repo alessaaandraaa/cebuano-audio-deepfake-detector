@@ -1,4 +1,4 @@
-"""
+r"""
 clone_voice.py
 
 Creates ElevenLabs Instant Voice Clones (IVC) for speakers selected
@@ -91,7 +91,6 @@ import os
 import sys
 from pathlib import Path
 
-
 # ---------------------------------------------------------------------------
 # OPTIONAL DEPENDENCIES
 # ---------------------------------------------------------------------------
@@ -100,8 +99,7 @@ try:
     import soundfile as sf
 except ImportError:
     print(
-        "Missing dependency: soundfile\n"
-        "Run: pip install soundfile",
+        "Missing dependency: soundfile\nRun: pip install soundfile",
         file=sys.stderr,
     )
     sys.exit(1)
@@ -112,8 +110,7 @@ try:
     from dotenv import load_dotenv
 except ImportError:
     print(
-        "Missing dependency(s).\n"
-        "Run: pip install requests python-dotenv",
+        "Missing dependency(s).\nRun: pip install requests python-dotenv",
         file=sys.stderr,
     )
     sys.exit(1)
@@ -137,32 +134,23 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
 DEFAULT_MANIFEST_PATH = (
-    PROJECT_ROOT
-    / "manifests"
-    / "elevenlabs_selected_speakers.csv"
+    PROJECT_ROOT / "manifests" / "elevenlabs_selected_speakers.csv"
 )
 
 
 DEFAULT_VOICE_LOG_PATH = (
-    PROJECT_ROOT
-    / "manifests"
-    / "elevenlabs_voice_ids.txt"
+    PROJECT_ROOT / "manifests" / "elevenlabs_voice_ids.txt"
 )
 
 
-DEFAULT_REFERENCE_ROOT = (
-    PROJECT_ROOT
-    / "elevenlabs-reference"
-)
+DEFAULT_REFERENCE_ROOT = PROJECT_ROOT / "elevenlabs-reference"
 
 
 # ---------------------------------------------------------------------------
 # ELEVENLABS API
 # ---------------------------------------------------------------------------
 
-API_URL = (
-    "https://api.elevenlabs.io/v1/voices/add"
-)
+API_URL = "https://api.elevenlabs.io/v1/voices/add"
 
 
 # ---------------------------------------------------------------------------
@@ -191,6 +179,7 @@ CONTENT_TYPE_MAP = {
 # SPEAKER MANIFEST
 # ---------------------------------------------------------------------------
 
+
 def load_all_selected_speakers(
     manifest_path: Path,
 ) -> list[str]:
@@ -213,7 +202,7 @@ def load_all_selected_speakers(
 
     if not manifest_path.exists():
         print(
-            f"ERROR: ElevenLabs speaker manifest not found:\n"
+            "ERROR: ElevenLabs speaker manifest not found:\n"
             f"  {manifest_path}",
             file=sys.stderr,
         )
@@ -245,24 +234,18 @@ def load_all_selected_speakers(
                     continue
 
                 # Optional header.
-                if (
-                    line_number == 1
-                    and speaker_id.lower()
-                    in {
-                        "speaker_id",
-                        "speaker",
-                        "id",
-                    }
-                ):
+                if line_number == 1 and speaker_id.lower() in {
+                    "speaker_id",
+                    "speaker",
+                    "id",
+                }:
                     continue
 
-                speakers.append(
-                    speaker_id
-                )
+                speakers.append(speaker_id)
 
     except Exception as e:
         print(
-            f"ERROR: failed to read speaker manifest:\n"
+            "ERROR: failed to read speaker manifest:\n"
             f"  {manifest_path}\n"
             f"  {e}",
             file=sys.stderr,
@@ -270,14 +253,11 @@ def load_all_selected_speakers(
         sys.exit(1)
 
     # Remove duplicates while preserving order.
-    speakers = list(
-        dict.fromkeys(speakers)
-    )
+    speakers = list(dict.fromkeys(speakers))
 
     if not speakers:
         print(
-            f"ERROR: no speakers found in:\n"
-            f"  {manifest_path}",
+            f"ERROR: no speakers found in:\n  {manifest_path}",
             file=sys.stderr,
         )
         sys.exit(1)
@@ -304,9 +284,7 @@ def select_batch(
     The manifest itself is never modified.
     """
 
-    start = (
-        batch_number - 1
-    ) * batch_size
+    start = (batch_number - 1) * batch_size
 
     end = start + batch_size
 
@@ -316,6 +294,7 @@ def select_batch(
 # ---------------------------------------------------------------------------
 # EXISTING VOICE IDS
 # ---------------------------------------------------------------------------
+
 
 def load_existing_voice_ids(
     voice_log_path: Path,
@@ -362,7 +341,7 @@ def load_existing_voice_ids(
 
                 if " - " not in line:
                     print(
-                        f"WARNING: ignoring malformed voice-log "
+                        "WARNING: ignoring malformed voice-log "
                         f"line {line_number}: {line!r}",
                         file=sys.stderr,
                     )
@@ -378,7 +357,7 @@ def load_existing_voice_ids(
 
                 if not speaker_id or not voice_id:
                     print(
-                        f"WARNING: ignoring malformed voice-log "
+                        "WARNING: ignoring malformed voice-log "
                         f"line {line_number}: {line!r}",
                         file=sys.stderr,
                     )
@@ -388,9 +367,7 @@ def load_existing_voice_ids(
 
     except Exception as e:
         print(
-            f"ERROR: failed to read voice ID log:\n"
-            f"  {voice_log_path}\n"
-            f"  {e}",
+            f"ERROR: failed to read voice ID log:\n  {voice_log_path}\n  {e}",
             file=sys.stderr,
         )
         sys.exit(1)
@@ -401,6 +378,7 @@ def load_existing_voice_ids(
 # ---------------------------------------------------------------------------
 # VOICE ID LOGGING
 # ---------------------------------------------------------------------------
+
 
 def append_voice_id(
     voice_log_path: Path,
@@ -426,14 +404,13 @@ def append_voice_id(
         encoding="utf-8",
     ) as f:
 
-        f.write(
-            f"{speaker_id} - {voice_id}\n"
-        )
+        f.write(f"{speaker_id} - {voice_id}\n")
 
 
 # ---------------------------------------------------------------------------
 # AUDIO VALIDATION
 # ---------------------------------------------------------------------------
+
 
 def validate_audio_file(
     path: Path,
@@ -446,14 +423,9 @@ def validate_audio_file(
     """
 
     try:
-        info = sf.info(
-            str(path)
-        )
+        info = sf.info(str(path))
 
-        duration = (
-            info.frames
-            / info.samplerate
-        )
+        duration = info.frames / info.samplerate
 
         if (
             info.frames <= 0
@@ -462,10 +434,7 @@ def validate_audio_file(
             or duration <= 0
         ):
 
-            print(
-                f"  INVALID: {path.name} "
-                f"(empty or malformed audio)"
-            )
+            print(f"  INVALID: {path.name} (empty or malformed audio)")
 
             return False
 
@@ -494,6 +463,7 @@ def validate_audio_file(
 # CREATE VOICE
 # ---------------------------------------------------------------------------
 
+
 def create_voice(
     speaker_id: str,
     clip_paths: list[Path],
@@ -509,9 +479,7 @@ def create_voice(
         None on failure
     """
 
-    voice_name = (
-        f"ceb-{speaker_id}"
-    )
+    voice_name = f"ceb-{speaker_id}"
 
     labels_dict = {
         "language": "ceb",
@@ -524,12 +492,8 @@ def create_voice(
 
     data = {
         "name": voice_name,
-        "labels": json.dumps(
-            labels_dict
-        ),
-        "remove_background_noise": str(
-            remove_background_noise
-        ).lower(),
+        "labels": json.dumps(labels_dict),
+        "remove_background_noise": str(remove_background_noise).lower(),
     }
 
     if description:
@@ -542,18 +506,12 @@ def create_voice(
 
         for path in clip_paths:
 
-            content_type = (
-                CONTENT_TYPE_MAP.get(
-                    path.suffix.lower()
-                )
-            )
+            content_type = CONTENT_TYPE_MAP.get(path.suffix.lower())
 
             if content_type is None:
 
                 content_type = (
-                    mimetypes.guess_type(
-                        str(path)
-                    )[0]
+                    mimetypes.guess_type(str(path))[0]
                     or "application/octet-stream"
                 )
 
@@ -562,9 +520,7 @@ def create_voice(
                 "rb",
             )
 
-            open_file_handles.append(
-                fh
-            )
+            open_file_handles.append(fh)
 
             files_payload.append(
                 (
@@ -579,12 +535,8 @@ def create_voice(
 
         print()
         print("=" * 60)
-        print(
-            f"Uploading {len(clip_paths)} clip(s)"
-        )
-        print(
-            f"Creating voice: {voice_name}"
-        )
+        print(f"Uploading {len(clip_paths)} clip(s)")
+        print(f"Creating voice: {voice_name}")
         print("=" * 60)
 
         response = requests.post(
@@ -601,12 +553,8 @@ def create_voice(
         print("=" * 60)
         print("REQUEST ERROR")
         print("=" * 60)
-        print(
-            f"Speaker: {speaker_id}"
-        )
-        print(
-            f"Error  : {e}"
-        )
+        print(f"Speaker: {speaker_id}")
+        print(f"Error  : {e}")
 
         return None
 
@@ -626,13 +574,9 @@ def create_voice(
         print("ElevenLabs API ERROR")
         print("=" * 60)
 
-        print(
-            f"Speaker: {speaker_id}"
-        )
+        print(f"Speaker: {speaker_id}")
 
-        print(
-            f"Status : {response.status_code}"
-        )
+        print(f"Status : {response.status_code}")
 
         try:
             print(
@@ -643,19 +587,13 @@ def create_voice(
             )
 
         except Exception:
-            print(
-                response.text
-            )
+            print(response.text)
 
         print()
-        print(
-            "Files that were uploaded:"
-        )
+        print("Files that were uploaded:")
 
         for path in clip_paths:
-            print(
-                f"  - {path.name}"
-            )
+            print(f"  - {path.name}")
 
         return None
 
@@ -670,21 +608,19 @@ def create_voice(
     except Exception as e:
 
         print(
-            f"ERROR: ElevenLabs returned an invalid "
+            "ERROR: ElevenLabs returned an invalid "
             f"JSON response for {speaker_id}: {e}",
             file=sys.stderr,
         )
 
         return None
 
-    voice_id = result.get(
-        "voice_id"
-    )
+    voice_id = result.get("voice_id")
 
     if not voice_id:
 
         print(
-            f"ERROR: ElevenLabs response did not "
+            "ERROR: ElevenLabs response did not "
             f"contain a voice_id for {speaker_id}.",
             file=sys.stderr,
         )
@@ -705,6 +641,7 @@ def create_voice(
 # MAIN
 # ---------------------------------------------------------------------------
 
+
 def main():
 
     parser = argparse.ArgumentParser(
@@ -717,35 +654,20 @@ def main():
 
     parser.add_argument(
         "--manifest",
-        default=str(
-            DEFAULT_MANIFEST_PATH
-        ),
-        help=(
-            "CSV containing selected "
-            "ElevenLabs speakers."
-        ),
+        default=str(DEFAULT_MANIFEST_PATH),
+        help="CSV containing selected ElevenLabs speakers.",
     )
 
     parser.add_argument(
         "--reference-root",
-        default=str(
-            DEFAULT_REFERENCE_ROOT
-        ),
-        help=(
-            "Root folder containing per-speaker "
-            "reference audio folders."
-        ),
+        default=str(DEFAULT_REFERENCE_ROOT),
+        help="Root folder containing per-speaker reference audio folders.",
     )
 
     parser.add_argument(
         "--voice-log",
-        default=str(
-            DEFAULT_VOICE_LOG_PATH
-        ),
-        help=(
-            "File containing speaker -> voice ID "
-            "mappings."
-        ),
+        default=str(DEFAULT_VOICE_LOG_PATH),
+        help="File containing speaker -> voice ID mappings.",
     )
 
     parser.add_argument(
@@ -763,10 +685,7 @@ def main():
         "--batch-size",
         type=int,
         default=30,
-        help=(
-            "Number of speakers per batch. "
-            "Default: 30."
-        ),
+        help="Number of speakers per batch. Default: 30.",
     )
 
     parser.add_argument(
@@ -812,14 +731,10 @@ def main():
 
         sys.exit(1)
 
-    if (
-        args.batch is not None
-        and args.speaker is not None
-    ):
+    if args.batch is not None and args.speaker is not None:
 
         print(
-            "ERROR: use either --batch or --speaker, "
-            "not both.",
+            "ERROR: use either --batch or --speaker, not both.",
             file=sys.stderr,
         )
 
@@ -829,19 +744,14 @@ def main():
     # Load environment
     # ------------------------------------------------------------------
 
-    load_dotenv(
-        PROJECT_ROOT / ".env"
-    )
+    load_dotenv(PROJECT_ROOT / ".env")
 
-    api_key = os.environ.get(
-        "ELEVENLABS_API_KEY"
-    )
+    api_key = os.environ.get("ELEVENLABS_API_KEY")
 
     if not api_key:
 
         print(
-            "ERROR: ELEVENLABS_API_KEY not found.\n"
-            "Check your .env file.",
+            "ERROR: ELEVENLABS_API_KEY not found.\nCheck your .env file.",
             file=sys.stderr,
         )
 
@@ -851,27 +761,17 @@ def main():
     # Paths
     # ------------------------------------------------------------------
 
-    manifest_path = Path(
-        args.manifest
-    )
+    manifest_path = Path(args.manifest)
 
-    reference_root = Path(
-        args.reference_root
-    )
+    reference_root = Path(args.reference_root)
 
-    voice_log_path = Path(
-        args.voice_log
-    )
+    voice_log_path = Path(args.voice_log)
 
     # ------------------------------------------------------------------
     # Load complete manifest
     # ------------------------------------------------------------------
 
-    all_speakers = (
-        load_all_selected_speakers(
-            manifest_path
-        )
-    )
+    all_speakers = load_all_selected_speakers(manifest_path)
 
     # ------------------------------------------------------------------
     # Determine speakers to process
@@ -883,20 +783,16 @@ def main():
 
             print(
                 f"ERROR: speaker {args.speaker} "
-                f"is not present in:\n"
+                "is not present in:\n"
                 f"  {manifest_path}",
                 file=sys.stderr,
             )
 
             sys.exit(1)
 
-        selected_speakers = [
-            args.speaker
-        ]
+        selected_speakers = [args.speaker]
 
-        batch_description = (
-            f"single speaker: {args.speaker}"
-        )
+        batch_description = f"single speaker: {args.speaker}"
 
     else:
 
@@ -924,46 +820,34 @@ def main():
 
         if not selected_speakers:
 
-            start_number = (
-                (args.batch - 1)
-                * args.batch_size
-                + 1
-            )
+            start_number = (args.batch - 1) * args.batch_size + 1
 
             print(
-                f"ERROR: batch {args.batch} contains "
-                f"no speakers.",
+                f"ERROR: batch {args.batch} contains no speakers.",
                 file=sys.stderr,
             )
 
             print(
-                f"Requested range: "
+                "Requested range: "
                 f"{start_number}-"
                 f"{start_number + args.batch_size - 1}",
                 file=sys.stderr,
             )
 
             print(
-                f"Manifest contains only "
-                f"{len(all_speakers)} speakers.",
+                f"Manifest contains only {len(all_speakers)} speakers.",
                 file=sys.stderr,
             )
 
             sys.exit(1)
 
-        start_index = (
-            (args.batch - 1)
-            * args.batch_size
-        )
+        start_index = (args.batch - 1) * args.batch_size
 
-        end_index = (
-            start_index
-            + len(selected_speakers)
-        )
+        end_index = start_index + len(selected_speakers)
 
         batch_description = (
             f"batch {args.batch} "
-            f"(manifest positions "
+            "(manifest positions "
             f"{start_index + 1}-{end_index})"
         )
 
@@ -971,11 +855,7 @@ def main():
     # Load already-created voices
     # ------------------------------------------------------------------
 
-    existing_voice_ids = (
-        load_existing_voice_ids(
-            voice_log_path
-        )
-    )
+    existing_voice_ids = load_existing_voice_ids(voice_log_path)
 
     # ------------------------------------------------------------------
     # Summary
@@ -983,52 +863,26 @@ def main():
 
     print()
     print("=" * 70)
-    print(
-        "ELEVENLABS INSTANT VOICE CLONE BATCH"
-    )
+    print("ELEVENLABS INSTANT VOICE CLONE BATCH")
     print("=" * 70)
 
-    print(
-        f"Manifest       : "
-        f"{manifest_path.resolve()}"
-    )
+    print(f"Manifest       : {manifest_path.resolve()}")
 
-    print(
-        f"Reference root : "
-        f"{reference_root.resolve()}"
-    )
+    print(f"Reference root : {reference_root.resolve()}")
 
-    print(
-        f"Voice ID log   : "
-        f"{voice_log_path.resolve()}"
-    )
+    print(f"Voice ID log   : {voice_log_path.resolve()}")
 
-    print(
-        f"Total speakers : "
-        f"{len(all_speakers)}"
-    )
+    print(f"Total speakers : {len(all_speakers)}")
 
-    print(
-        f"Selection      : "
-        f"{batch_description}"
-    )
+    print(f"Selection      : {batch_description}")
 
     if not args.speaker:
 
-        print(
-            f"Batch size     : "
-            f"{args.batch_size}"
-        )
+        print(f"Batch size     : {args.batch_size}")
 
-    print(
-        f"Speakers       : "
-        f"{len(selected_speakers)}"
-    )
+    print(f"Speakers       : {len(selected_speakers)}")
 
-    print(
-        f"Already cloned : "
-        f"{len(existing_voice_ids)}"
-    )
+    print(f"Already cloned : {len(existing_voice_ids)}")
 
     print("=" * 70)
 
@@ -1037,9 +891,7 @@ def main():
     # ------------------------------------------------------------------
 
     print()
-    print(
-        "Speakers selected for this run:"
-    )
+    print("Speakers selected for this run:")
 
     for position, speaker_id in enumerate(
         selected_speakers,
@@ -1048,18 +900,11 @@ def main():
 
         if speaker_id in existing_voice_ids:
 
-            print(
-                f"  {position:>2}. "
-                f"{speaker_id} "
-                f"[ALREADY DONE]"
-            )
+            print(f"  {position:>2}. {speaker_id} [ALREADY DONE]")
 
         else:
 
-            print(
-                f"  {position:>2}. "
-                f"{speaker_id}"
-            )
+            print(f"  {position:>2}. {speaker_id}")
 
     print("-" * 70)
 
@@ -1082,10 +927,7 @@ def main():
 
         print()
         print("=" * 70)
-        print(
-            f"[{index}/{len(selected_speakers)}] "
-            f"Speaker {speaker_id}"
-        )
+        print(f"[{index}/{len(selected_speakers)}] Speaker {speaker_id}")
         print("=" * 70)
 
         # --------------------------------------------------------------
@@ -1094,14 +936,9 @@ def main():
 
         if speaker_id in existing_voice_ids:
 
-            print(
-                "SKIPPED: speaker already has "
-                "a voice ID:"
-            )
+            print("SKIPPED: speaker already has a voice ID:")
 
-            print(
-                f"  {existing_voice_ids[speaker_id]}"
-            )
+            print(f"  {existing_voice_ids[speaker_id]}")
 
             skipped_count += 1
 
@@ -1111,23 +948,13 @@ def main():
         # Reference directory
         # --------------------------------------------------------------
 
-        speaker_dir = (
-            reference_root
-            / speaker_id
-        )
+        speaker_dir = reference_root / speaker_id
 
-        if (
-            not speaker_dir.exists()
-            or not speaker_dir.is_dir()
-        ):
+        if not speaker_dir.exists() or not speaker_dir.is_dir():
 
-            print(
-                "ERROR: no reference folder found:"
-            )
+            print("ERROR: no reference folder found:")
 
-            print(
-                f"  {speaker_dir}"
-            )
+            print(f"  {speaker_dir}")
 
             failed_count += 1
 
@@ -1140,77 +967,50 @@ def main():
         clip_paths = sorted(
             f
             for f in speaker_dir.iterdir()
-            if (
-                f.is_file()
-                and f.suffix.lower()
-                in AUDIO_EXTENSIONS
-            )
+            if (f.is_file() and f.suffix.lower() in AUDIO_EXTENSIONS)
         )
 
         if not clip_paths:
 
-            print(
-                "ERROR: no audio files found in:"
-            )
+            print("ERROR: no audio files found in:")
 
-            print(
-                f"  {speaker_dir}"
-            )
+            print(f"  {speaker_dir}")
 
             failed_count += 1
 
             continue
 
-        print(
-            f"Reference dir: "
-            f"{speaker_dir.resolve()}"
-        )
+        print(f"Reference dir: {speaker_dir.resolve()}")
 
-        print(
-            f"Clips found  : "
-            f"{len(clip_paths)}"
-        )
+        print(f"Clips found  : {len(clip_paths)}")
 
         # --------------------------------------------------------------
         # Validate audio
         # --------------------------------------------------------------
 
         print()
-        print(
-            "Reference audio validation:"
-        )
+        print("Reference audio validation:")
 
         print("-" * 70)
 
         valid_clip_paths = [
-            path
-            for path in clip_paths
-            if validate_audio_file(path)
+            path for path in clip_paths if validate_audio_file(path)
         ]
 
         if not valid_clip_paths:
 
-            print(
-                f"ERROR: no valid reference audio "
-                f"remains for {speaker_id}."
-            )
+            print(f"ERROR: no valid reference audio remains for {speaker_id}.")
 
             failed_count += 1
 
             continue
 
-        invalid_count = (
-            len(clip_paths)
-            - len(valid_clip_paths)
-        )
+        invalid_count = len(clip_paths) - len(valid_clip_paths)
 
         if invalid_count > 0:
 
             print()
-            print(
-                f"WARNING: {invalid_count} invalid "
-                f"clip(s) excluded."
-            )
+            print(f"WARNING: {invalid_count} invalid clip(s) excluded.")
 
         # --------------------------------------------------------------
         # Create voice
@@ -1220,17 +1020,13 @@ def main():
             speaker_id=speaker_id,
             clip_paths=valid_clip_paths,
             api_key=api_key,
-            remove_background_noise=(
-                args.remove_background_noise
-            ),
+            remove_background_noise=(args.remove_background_noise),
         )
 
         if voice_id is None:
 
             print()
-            print(
-                f"FAILED: speaker {speaker_id}"
-            )
+            print(f"FAILED: speaker {speaker_id}")
 
             failed_count += 1
 
@@ -1248,35 +1044,23 @@ def main():
 
         # Update in-memory state so the current run
         # also knows this speaker is complete.
-        existing_voice_ids[
-            speaker_id
-        ] = voice_id
+        existing_voice_ids[speaker_id] = voice_id
 
         created_count += 1
 
         print()
         print("=" * 70)
-        print(
-            "VOICE CREATED SUCCESSFULLY"
-        )
+        print("VOICE CREATED SUCCESSFULLY")
         print("=" * 70)
 
-        print(
-            f"Speaker : {speaker_id}"
-        )
+        print(f"Speaker : {speaker_id}")
 
-        print(
-            f"Voice ID: {voice_id}"
-        )
+        print(f"Voice ID: {voice_id}")
 
         print()
-        print(
-            "Logged to:"
-        )
+        print("Logged to:")
 
-        print(
-            f"  {voice_log_path}"
-        )
+        print(f"  {voice_log_path}")
 
     # ------------------------------------------------------------------
     # Final summary
@@ -1284,40 +1068,20 @@ def main():
 
     print()
     print("=" * 70)
-    print(
-        "BATCH COMPLETE"
-    )
+    print("BATCH COMPLETE")
     print("=" * 70)
 
-    print(
-        f"Selection           : "
-        f"{batch_description}"
-    )
+    print(f"Selection           : {batch_description}")
 
-    print(
-        f"Speakers in run     : "
-        f"{len(selected_speakers)}"
-    )
+    print(f"Speakers in run     : {len(selected_speakers)}")
 
-    print(
-        f"Voices created      : "
-        f"{created_count}"
-    )
+    print(f"Voices created      : {created_count}")
 
-    print(
-        f"Already completed   : "
-        f"{skipped_count}"
-    )
+    print(f"Already completed   : {skipped_count}")
 
-    print(
-        f"Failed              : "
-        f"{failed_count}"
-    )
+    print(f"Failed              : {failed_count}")
 
-    print(
-        f"Voice ID log        : "
-        f"{voice_log_path.resolve()}"
-    )
+    print(f"Voice ID log        : {voice_log_path.resolve()}")
 
     print("=" * 70)
 

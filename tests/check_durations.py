@@ -1,4 +1,4 @@
-"""
+r"""
 check_durations.py
 
 Loops through each speaker subfolder under a root folder
@@ -8,7 +8,7 @@ duration stats per speaker folder and overall.
 No log files, no manifests — just reads the audio files directly.
 
 Usage:
-    python check_durations.py --root "data\\processed\\bonafide"
+    python check_durations.py --root "data\processed\bonafide"
 """
 
 import argparse
@@ -35,8 +35,17 @@ def bucket_counts(durations):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Check audio durations per speaker folder")
-    parser.add_argument("--root", required=True, help="Root folder containing speaker subfolders (e.g. data/processed/bonafide)")
+    parser = argparse.ArgumentParser(
+        description="Check audio durations per speaker folder"
+    )
+    parser.add_argument(
+        "--root",
+        required=True,
+        help=(
+            "Root folder containing speaker subfolders "
+            "(e.g. data/processed/bonafide)"
+        ),
+    )
     args = parser.parse_args()
 
     root = Path(args.root)
@@ -47,7 +56,9 @@ def main():
     speaker_dirs = sorted(d for d in root.iterdir() if d.is_dir())
 
     if not speaker_dirs:
-        print(f"ERROR: no speaker subfolders found under {root}", file=sys.stderr)
+        print(
+            f"ERROR: no speaker subfolders found under {root}", file=sys.stderr
+        )
         sys.exit(1)
 
     all_durations = []
@@ -102,7 +113,10 @@ def main():
     print(f"OVERALL ({n} clips across {len(speaker_dirs)} speaker folders)")
     print("=" * 60)
     print(f"Mean duration : {sum(all_durations)/n:.2f}s")
-    print(f"Min / Max     : {min(all_durations):.2f}s / {max(all_durations):.2f}s")
+    print(
+        f"Min / Max     : {min(all_durations):.2f}s /"
+        f" {max(all_durations):.2f}s"
+    )
     print()
     print("Duration buckets:")
     for label, count in buckets.items():
@@ -110,7 +124,9 @@ def main():
         print(f"  {label:6s} : {count:6d}  ({pct:.1f}%)")
 
     if all_under_1s:
-        print(f"\nFiles under 1s ({len(all_under_1s)} total, showing first 15):")
+        print(
+            f"\nFiles under 1s ({len(all_under_1s)} total, showing first 15):"
+        )
         for path, d in all_under_1s[:15]:
             print(f"  {d:.2f}s  {path}")
         if len(all_under_1s) > 15:

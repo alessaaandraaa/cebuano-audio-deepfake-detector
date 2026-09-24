@@ -1,15 +1,17 @@
-"""
+r"""
 extract_english_entities.py
 
 Walks EVERY speaker folder under --root, parses each speaker's .log file,
-and extracts every UNIQUE utterance from the specified English-heavy 
+and extracts every UNIQUE utterance from the specified English-heavy
 isolated prompt lists.
 
 Outputs a JSON template file where you can monitor all the English terms
 and eventually fill in their phonetic Bisaya spellings.
 
 Usage:
-    python preprocessing\extract_english_entities.py --root "C:\path\to\bonafide" --out "english_words_to_map.json"
+    python preprocessing\extract_english_entities.py \
+        --root "C:\path\to\bonafide" \
+        --out "english_words_to_map.json"
 """
 
 import argparse
@@ -30,30 +32,27 @@ TARGET_SOURCE_FILES = {
     "CEB_Iso_Landmarks.txt",
     "CEB_Iso_NamesMale.txt",
     "CEB_Iso_NamesFem.txt",
-    "CEB_Iso_Surnames_Countries.txt"
+    "CEB_Iso_Surnames_Countries.txt",
 }
 
 # ---------------------------------------------------------------------------
 # REGEX
 # ---------------------------------------------------------------------------
-LINE_PATTERN = re.compile(
-    r'^(\S+\.wav)\s+"([^"]*)"\s+(.*)$'
-)
+LINE_PATTERN = re.compile(r'^(\S+\.wav)\s+"([^"]*)"\s+(.*)$')
 
-PAREN_PATTERN = re.compile(
-    r'\s*\([^)]*\)'
-)
+PAREN_PATTERN = re.compile(r"\s*\([^)]*\)")
 
 # ---------------------------------------------------------------------------
 # HELPER FUNCTIONS
 # ---------------------------------------------------------------------------
+
 
 def clean_text(raw: str) -> str:
     """Basic cleaning to get just the text."""
     text = raw.strip()
     if text.startswith('"') and text.endswith('"') and len(text) >= 2:
         text = text[1:-1]
-    
+
     text = PAREN_PATTERN.sub("", text)
     text = re.sub(r"\s+", " ", text).strip()
     return text
@@ -65,7 +64,11 @@ def find_log_file(speaker_dir: Path):
     if not log_files:
         return None
     if len(log_files) > 1:
-        print(f"WARNING: multiple .log files in {speaker_dir}, using {log_files[0].name}", file=sys.stderr)
+        print(
+            f"WARNING: multiple .log files in {speaker_dir}, using"
+            f" {log_files[0].name}",
+            file=sys.stderr,
+        )
     return log_files[0]
 
 
@@ -74,13 +77,17 @@ def parse_transcript_lines(log_path: Path):
     with open(log_path, "r", encoding="utf-8", errors="replace") as f:
         for line in f:
             line = line.rstrip("\n")
-            if not line.strip() or "=" in line and not line.strip().startswith('"'):
+            if (
+                not line.strip()
+                or "=" in line
+                and not line.strip().startswith('"')
+            ):
                 continue
-                
+
             m = LINE_PATTERN.match(line.strip())
             if not m:
                 continue
-                
+
             yield m.groups()
 
 
@@ -88,9 +95,12 @@ def parse_transcript_lines(log_path: Path):
 # MAIN
 # ---------------------------------------------------------------------------
 
+
 def main():
     parser = argparse.ArgumentParser(
-        description="Extract unique English utterances from specific Iso prompt files."
+        description=(
+            "Extract unique English utterances from specific Iso prompt files."
+        )
     )
     parser.add_argument(
         "--root",
@@ -112,7 +122,9 @@ def main():
         sys.exit(1)
 
     speaker_dirs = sorted(d for d in root.iterdir() if d.is_dir())
-    print(f"Scanning {len(speaker_dirs)} speaker folders for English prompts...")
+    print(
+        f"Scanning {len(speaker_dirs)} speaker folders for English prompts..."
+    )
 
     unique_prompts = set()
     total_found = 0
@@ -122,7 +134,9 @@ def main():
         if not log_file:
             continue
 
-        for filename, source_file, raw_text in parse_transcript_lines(log_file):
+        for filename, source_file, raw_text in parse_transcript_lines(
+            log_file
+        ):
             if source_file in TARGET_SOURCE_FILES:
                 cleaned = clean_text(raw_text)
                 if cleaned:
@@ -133,10 +147,10 @@ def main():
     print("Done scanning.")
     print(f"Total English utterances found   : {total_found}")
     print(f"Unique English utterances to map : {len(unique_prompts)}")
-    
+
     # Save to JSON
     mapping_dict = {prompt: "" for prompt in sorted(unique_prompts)}
-    
+
     with open(out_file, "w", encoding="utf-8") as f:
         json.dump(mapping_dict, f, indent=4, ensure_ascii=False)
 

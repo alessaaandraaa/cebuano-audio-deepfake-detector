@@ -1,4 +1,4 @@
-"""
+r"""
 trim_silence.py
 
 Recursively trims leading and trailing silence from WAV files.
@@ -27,13 +27,17 @@ Original files are NEVER modified.
 
 Examples:
 
-    python preprocessing\\trim_silence.py --input data\\processed\\bonafide --out data\\processed\\bonafide-trimmed
+    python preprocessing\trim_silence.py \
+        --input data\processed\bonafide \
+        --out data\processed\bonafide-trimmed
 
-    python preprocessing\\trim_silence.py --input data\\processed\\meta-mms --out data\\processed\\meta-mms-trimmed
+    python preprocessing\trim_silence.py \
+        --input data\processed\meta-mms \
+        --out data\processed\meta-mms-trimmed
 
-    python preprocessing\\trim_silence.py ^
-        --input data\\processed\\bonafide ^
-        --out data\\processed\\bonafide-trimmed ^
+    python preprocessing\trim_silence.py ^
+        --input data\processed\bonafide ^
+        --out data\processed\bonafide-trimmed ^
         --threshold -40 ^
         --padding 50
 """
@@ -64,6 +68,7 @@ except ImportError:
 # ---------------------------------------------------------------------------
 # TRIMMING
 # ---------------------------------------------------------------------------
+
 
 def trim_silence(
     audio: AudioSegment,
@@ -111,13 +116,11 @@ def trim_silence(
 # MAIN
 # ---------------------------------------------------------------------------
 
+
 def main():
 
     parser = argparse.ArgumentParser(
-        description=(
-            "Recursively trim leading/trailing silence "
-            "from WAV files."
-        )
+        description="Recursively trim leading/trailing silence from WAV files."
     )
 
     parser.add_argument(
@@ -136,10 +139,7 @@ def main():
         "--threshold",
         type=float,
         default=-40.0,
-        help=(
-            "Silence threshold in dBFS. "
-            "Default: -40"
-        ),
+        help="Silence threshold in dBFS. Default: -40",
     )
 
     parser.add_argument(
@@ -173,16 +173,14 @@ def main():
 
     if not input_root.exists():
         print(
-            f"ERROR: input directory not found: "
-            f"{input_root}",
+            f"ERROR: input directory not found: {input_root}",
             file=sys.stderr,
         )
         sys.exit(1)
 
     if not input_root.is_dir():
         print(
-            f"ERROR: input path is not a directory: "
-            f"{input_root}",
+            f"ERROR: input path is not a directory: {input_root}",
             file=sys.stderr,
         )
         sys.exit(1)
@@ -205,9 +203,7 @@ def main():
     # Find WAV files
     # -----------------------------------------------------------------------
 
-    wav_files = sorted(
-        input_root.rglob("*.wav")
-    )
+    wav_files = sorted(input_root.rglob("*.wav"))
 
     if not wav_files:
         print(
@@ -229,29 +225,17 @@ def main():
     print("Audio Silence Trimming")
     print("=" * 60)
 
-    print(
-        f"Input          : {input_root.resolve()}"
-    )
+    print(f"Input          : {input_root.resolve()}")
 
-    print(
-        f"Output         : {output_root.resolve()}"
-    )
+    print(f"Output         : {output_root.resolve()}")
 
-    print(
-        f"Threshold      : {args.threshold} dBFS"
-    )
+    print(f"Threshold      : {args.threshold} dBFS")
 
-    print(
-        f"Padding        : {args.padding} ms"
-    )
+    print(f"Padding        : {args.padding} ms")
 
-    print(
-        f"Min silence    : {args.min_silence} ms"
-    )
+    print(f"Min silence    : {args.min_silence} ms")
 
-    print(
-        f"WAV files found: {len(wav_files)}"
-    )
+    print(f"WAV files found: {len(wav_files)}")
 
     print("-" * 60)
 
@@ -286,9 +270,7 @@ def main():
         # output:
         #   bonafide-trimmed/0200/file.wav
         #
-        relative_path = input_path.relative_to(
-            input_root
-        )
+        relative_path = input_path.relative_to(input_root)
 
         output_path = output_root / relative_path
 
@@ -299,9 +281,7 @@ def main():
 
         try:
 
-            audio = AudioSegment.from_wav(
-                input_path
-            )
+            audio = AudioSegment.from_wav(input_path)
 
             original_duration = len(audio)
 
@@ -341,10 +321,7 @@ def main():
             # Progress
             # ---------------------------------------------------------------
 
-            if (
-                index % 100 == 0
-                or index == len(wav_files)
-            ):
+            if index % 100 == 0 or index == len(wav_files):
 
                 print(
                     f"{index}/{len(wav_files)} processed "
@@ -376,21 +353,13 @@ def main():
     print("DONE")
     print("=" * 60)
 
-    print(
-        f"Files processed : {total_processed}"
-    )
+    print(f"Files processed : {total_processed}")
 
-    print(
-        f"Files trimmed   : {total_trimmed}"
-    )
+    print(f"Files trimmed   : {total_trimmed}")
 
-    print(
-        f"Files unchanged : {total_unchanged}"
-    )
+    print(f"Files unchanged : {total_unchanged}")
 
-    print(
-        f"Files failed    : {total_failed}"
-    )
+    print(f"Files failed    : {total_failed}")
 
     # -----------------------------------------------------------------------
     # Duration statistics
@@ -398,46 +367,26 @@ def main():
 
     if total_original_ms > 0:
 
-        original_seconds = (
-            total_original_ms / 1000
-        )
+        original_seconds = total_original_ms / 1000
 
-        output_seconds = (
-            total_output_ms / 1000
-        )
+        output_seconds = total_output_ms / 1000
 
-        removed_seconds = (
-            total_original_ms
-            - total_output_ms
-        ) / 1000
+        removed_seconds = (total_original_ms - total_output_ms) / 1000
 
         print()
-        print(
-            f"Original duration : "
-            f"{original_seconds / 3600:.2f} hours"
-        )
+        print(f"Original duration : {original_seconds / 3600:.2f} hours")
 
-        print(
-            f"Output duration   : "
-            f"{output_seconds / 3600:.2f} hours"
-        )
+        print(f"Output duration   : {output_seconds / 3600:.2f} hours")
 
-        print(
-            f"Silence removed   : "
-            f"{removed_seconds / 3600:.2f} hours"
-        )
+        print(f"Silence removed   : {removed_seconds / 3600:.2f} hours")
 
     print()
-    print(
-        f"Output directory: "
-        f"{output_root.resolve()}"
-    )
+    print(f"Output directory: {output_root.resolve()}")
 
     if total_failed:
         print()
         print(
-            "WARNING: Some files failed. "
-            "Review the FAILED messages above.",
+            "WARNING: Some files failed. Review the FAILED messages above.",
             file=sys.stderr,
         )
 

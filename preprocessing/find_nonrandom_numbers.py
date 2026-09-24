@@ -1,4 +1,4 @@
-"""
+r"""
 find_nonrandom_numbers.py
 
 Scans speaker .log files for utterances that contain a digit/number
@@ -18,7 +18,10 @@ script tells you how many such utterances actually exist and what they
 look like, so you can decide whether that matters for your corpus.
 
 Usage:
-    python preprocessing/find_nonrandom_numbers.py --root "C:\\Users\\Ninzz\\Programming\\PLD\\up-dsp-pld\\PLD\\CEB"  --speakers-csv manifests\\elevenlabs_selected_speakers.csv --out nonrandom_numbers.csv
+    python preprocessing/find_nonrandom_numbers.py \
+        --root "C:\Users\Ninzz\Programming\PLD\up-dsp-pld\PLD\CEB" \
+        --speakers-csv manifests\elevenlabs_selected_speakers.csv \
+        --out nonrandom_numbers.csv
 """
 
 import argparse
@@ -31,14 +34,12 @@ from pathlib import Path
 # Same parsing rules as extract_transcripts.py
 # ---------------------------------------------------------------------------
 
-LINE_PATTERN = re.compile(
-    r'^(\S+\.wav)\s+"([^"]*)"\s+(.*)$'
-)
+LINE_PATTERN = re.compile(r'^(\S+\.wav)\s+"([^"]*)"\s+(.*)$')
 
 # Matches any run of digits, anywhere in the text (not just standalone
 # 1-9) — this is deliberately broader than extract_transcripts.py's
 # SINGLE_DIGIT_PATTERN, since we want to catch 10-100 numbers too.
-ANY_NUMBER_PATTERN = re.compile(r'\d+')
+ANY_NUMBER_PATTERN = re.compile(r"\d+")
 
 EXCLUDE_SOURCE_PREFIXES = (
     "TGL_",
@@ -51,7 +52,9 @@ def is_digit_entry(source_file: str) -> bool:
 
 
 def should_exclude_source(source_file: str) -> bool:
-    return any(source_file.startswith(prefix) for prefix in EXCLUDE_SOURCE_PREFIXES)
+    return any(
+        source_file.startswith(prefix) for prefix in EXCLUDE_SOURCE_PREFIXES
+    )
 
 
 def load_speaker_ids(csv_path: Path) -> list[str]:
@@ -64,7 +67,11 @@ def load_speaker_ids(csv_path: Path) -> list[str]:
             speaker_id = row[0].strip()
             if not speaker_id:
                 continue
-            if line_number == 1 and speaker_id.lower() in {"speaker_id", "speaker", "id"}:
+            if line_number == 1 and speaker_id.lower() in {
+                "speaker_id",
+                "speaker",
+                "id",
+            }:
                 continue
             speakers.append(speaker_id)
     return list(dict.fromkeys(speakers))
@@ -93,12 +100,38 @@ def parse_transcript_lines(log_path: Path):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Find non-Random-Digit utterances containing numbers, for selected speakers only"
+        description=(
+            "Find non-Random-Digit utterances containing numbers, "
+            "for selected speakers only"
+        )
     )
-    parser.add_argument("--root", required=True, help="Path to the corpus root folder (speaker subfolders with .log files)")
-    parser.add_argument("--speakers-csv", required=True, help="CSV with a speaker_id column (e.g. elevenlabs_selected_speakers.csv)")
-    parser.add_argument("--out", default=None, help="Optional path to write results as CSV")
-    parser.add_argument("--include-excluded-sources", action="store_true", help="Also include utterances from TGL_/CEB_Utt_Eng-prefixed sources (excluded from transcripts by default)")
+    parser.add_argument(
+        "--root",
+        required=True,
+        help=(
+            "Path to the corpus root folder "
+            "(speaker subfolders with .log files)"
+        ),
+    )
+    parser.add_argument(
+        "--speakers-csv",
+        required=True,
+        help=(
+            "CSV with a speaker_id column "
+            "(e.g. elevenlabs_selected_speakers.csv)"
+        ),
+    )
+    parser.add_argument(
+        "--out", default=None, help="Optional path to write results as CSV"
+    )
+    parser.add_argument(
+        "--include-excluded-sources",
+        action="store_true",
+        help=(
+            "Also include utterances from TGL_/CEB_Utt_Eng-prefixed "
+            "sources (excluded from transcripts by default)"
+        ),
+    )
     args = parser.parse_args()
 
     root = Path(args.root)
@@ -108,7 +141,9 @@ def main():
         print(f"ERROR: root not found: {root}", file=sys.stderr)
         sys.exit(1)
     if not speakers_csv.exists():
-        print(f"ERROR: speakers CSV not found: {speakers_csv}", file=sys.stderr)
+        print(
+            f"ERROR: speakers CSV not found: {speakers_csv}", file=sys.stderr
+        )
         sys.exit(1)
 
     speaker_ids = load_speaker_ids(speakers_csv)
@@ -131,27 +166,39 @@ def main():
             missing_logs.append(speaker_id)
             continue
 
-        for filename, source_file, raw_text in parse_transcript_lines(log_file):
+        for filename, source_file, raw_text in parse_transcript_lines(
+            log_file
+        ):
 
             if is_digit_entry(source_file):
-                continue  # this is exactly what we're excluding — that's the point
+                # this is exactly what we're excluding -- that's the point
+                continue
 
-            if should_exclude_source(source_file) and not args.include_excluded_sources:
-                continue  # wouldn't end up in transcripts anyway, skip by default
+            if (
+                should_exclude_source(source_file)
+                and not args.include_excluded_sources
+            ):
+                # wouldn't end up in transcripts anyway, skip by default
+                continue
 
             numbers_found = ANY_NUMBER_PATTERN.findall(raw_text)
             if not numbers_found:
                 continue
 
-            results.append({
-                "speaker_id": speaker_id,
-                "wav_filename": filename,
-                "source_file": source_file,
-                "numbers_found": ",".join(numbers_found),
-                "text": raw_text,
-            })
+            results.append(
+                {
+                    "speaker_id": speaker_id,
+                    "wav_filename": filename,
+                    "source_file": source_file,
+                    "numbers_found": ",".join(numbers_found),
+                    "text": raw_text,
+                }
+            )
 
-    print(f"Found {len(results)} non-Random-Digit utterance(s) containing a number.")
+    print(
+        f"Found {len(results)} non-Random-Digit utterance(s) containing a"
+        " number."
+    )
     print("-" * 70)
 
     for r in results:
@@ -162,14 +209,31 @@ def main():
         print()
 
     if missing_dirs:
-        print(f"WARNING: {len(missing_dirs)} speaker(s) had no folder under root: {missing_dirs}", file=sys.stderr)
+        print(
+            f"WARNING: {len(missing_dirs)} speaker(s) had no folder under"
+            f" root: {missing_dirs}",
+            file=sys.stderr,
+        )
     if missing_logs:
-        print(f"WARNING: {len(missing_logs)} speaker(s) had no .log file: {missing_logs}", file=sys.stderr)
+        print(
+            f"WARNING: {len(missing_logs)} speaker(s) had no .log file:"
+            f" {missing_logs}",
+            file=sys.stderr,
+        )
 
     if args.out:
         out_path = Path(args.out)
         with open(out_path, "w", newline="", encoding="utf-8") as f:
-            writer = csv.DictWriter(f, fieldnames=["speaker_id", "wav_filename", "source_file", "numbers_found", "text"])
+            writer = csv.DictWriter(
+                f,
+                fieldnames=[
+                    "speaker_id",
+                    "wav_filename",
+                    "source_file",
+                    "numbers_found",
+                    "text",
+                ],
+            )
             writer.writeheader()
             writer.writerows(results)
         print(f"\nResults written to: {out_path.resolve()}")
@@ -177,7 +241,11 @@ def main():
     print()
     print("=" * 70)
     print(f"Total non-Random-Digit utterances with a number: {len(results)}")
-    print(f"Speakers checked: {len(speaker_ids) - len(missing_dirs) - len(missing_logs)} / {len(speaker_ids)}")
+    print(
+        "Speakers checked:"
+        f" {len(speaker_ids) - len(missing_dirs) - len(missing_logs)} /"
+        f" {len(speaker_ids)}"
+    )
     print("=" * 70)
 
 

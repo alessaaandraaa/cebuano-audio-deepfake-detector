@@ -1,5 +1,5 @@
-"""
-find_elevenlabs_number_regeneration.py
+r"""
+check_random_digits.py
 
 Scans the ORIGINAL corpus for Random Digit utterances belonging to
 speakers that have ElevenLabs voice IDs.
@@ -12,13 +12,15 @@ The generated TSV contains:
 The original corpus is never modified.
 
 Usage:
-    python preprocessing\\number_mapping\\check_random_digits.py --root "C:\\path\\to\\original\\bonafide" --voice-ids "manifests\\elevenlabs_voice_ids.txt" --out "manifests\\elevenlabs_number_regeneration.tsv"
+    python preprocessing\number_mapping\check_random_digits.py \
+        --root "C:\path\to\original\bonafide" \
+        --voice-ids "manifests\elevenlabs_voice_ids.txt" \
+        --out "manifests\elevenlabs_number_regeneration.tsv"
 """
 
 import argparse
 import sys
 from pathlib import Path
-
 
 # ---------------------------------------------------------------------------
 # NUMBER -> ELEVENLABS TTS MAPPING
@@ -36,7 +38,6 @@ NUMBER_MAPPING = {
     18: "disiotso",
     19: "disinoybe",
     20: "baynte",
-
     21: "baynte uno",
     22: "baynte dos",
     23: "baynte tres",
@@ -46,7 +47,6 @@ NUMBER_MAPPING = {
     27: "baynte syete",
     28: "baynte otso",
     29: "baynte noybe",
-
     30: "traynta",
     31: "trayntay uno",
     32: "trayntay dos",
@@ -57,7 +57,6 @@ NUMBER_MAPPING = {
     37: "trayntay syete",
     38: "trayntay otso",
     39: "trayntay noybe",
-
     40: "kwarenta",
     41: "kwarentay uno",
     42: "kwarentay dos",
@@ -68,7 +67,6 @@ NUMBER_MAPPING = {
     47: "kwarentay syete",
     48: "kwarentay otso",
     49: "kwarentay noybe",
-
     50: "singkwenta",
     51: "singkwentay uno",
     52: "singkwentay dos",
@@ -79,7 +77,6 @@ NUMBER_MAPPING = {
     57: "singkwentay syete",
     58: "singkwentay otso",
     59: "singkwentay noybe",
-
     60: "saysenta",
     61: "saysentay uno",
     62: "saysentay dos",
@@ -90,7 +87,6 @@ NUMBER_MAPPING = {
     67: "saysentay syete",
     68: "saysentay otso",
     69: "saysentay noybe",
-
     70: "sitenta",
     71: "sitentay uno",
     72: "sitentay dos",
@@ -101,7 +97,6 @@ NUMBER_MAPPING = {
     77: "sitentay syete",
     78: "sitentay otso",
     79: "sitentay noybe",
-
     80: "otsenta",
     81: "otsentay uno",
     82: "otsentay dos",
@@ -112,7 +107,6 @@ NUMBER_MAPPING = {
     87: "otsentay syete",
     88: "otsentay otso",
     89: "otsentay noybe",
-
     90: "nobenta",
     91: "nobentay uno",
     92: "nobentay dos",
@@ -123,7 +117,6 @@ NUMBER_MAPPING = {
     97: "nobentay syete",
     98: "nobentay otso",
     99: "nobentay noybe",
-
     100: "usa ka gatos",
 }
 
@@ -268,7 +261,10 @@ def main():
     parser.add_argument(
         "--root",
         required=True,
-        help="Path to ORIGINAL corpus / bonafide root containing speaker folders",
+        help=(
+            "Path to ORIGINAL corpus / bonafide root containing "
+            "speaker folders"
+        ),
     )
 
     parser.add_argument(
@@ -311,18 +307,13 @@ def main():
 
     voice_ids = load_voice_ids(voice_ids_path)
 
-    print(
-        f"Loaded {len(voice_ids)} ElevenLabs speaker voice IDs."
-    )
+    print(f"Loaded {len(voice_ids)} ElevenLabs speaker voice IDs.")
 
     # -----------------------------------------------------------------------
     # Scan only those speakers
     # -----------------------------------------------------------------------
 
-    print(
-        f"\nScanning original corpus:\n"
-        f"  {root.resolve()}"
-    )
+    print(f"\nScanning original corpus:\n  {root.resolve()}")
 
     rows = []
 
@@ -339,9 +330,7 @@ def main():
         log_file = find_log_file(speaker_dir)
 
         if not log_file:
-            print(
-                f"WARNING: [{speaker_id}] no .log file found, skipping."
-            )
+            print(f"WARNING: [{speaker_id}] no .log file found, skipping.")
             continue
 
         random_digits = parse_random_digits(log_file)
@@ -351,7 +340,7 @@ def main():
 
         print(
             f"[{speaker_id}] found {len(random_digits)} "
-            f"Random Digit entries (10-100)"
+            "Random Digit entries (10-100)"
         )
 
         for wav_filename, number in random_digits:
@@ -398,17 +387,10 @@ def main():
         newline="",
     ) as f:
 
-        f.write(
-            "speaker_id\twav_filename\tnumber\ttts_text\n"
-        )
+        f.write("speaker_id\twav_filename\tnumber\ttts_text\n")
 
         for speaker_id, wav_filename, number, tts_text in rows:
-            f.write(
-                f"{speaker_id}\t"
-                f"{wav_filename}\t"
-                f"{number}\t"
-                f"{tts_text}\n"
-            )
+            f.write(f"{speaker_id}\t{wav_filename}\t{number}\t{tts_text}\n")
 
     # -----------------------------------------------------------------------
     # Summary
@@ -416,27 +398,17 @@ def main():
 
     print("\n" + "-" * 60)
 
-    print(
-        f"Found {len(rows)} Random Digit files to regenerate."
-    )
+    print(f"Found {len(rows)} Random Digit files to regenerate.")
 
-    print(
-        f"TSV written to:\n"
-        f"  {out_path.resolve()}"
-    )
+    print(f"TSV written to:\n  {out_path.resolve()}")
 
     print("\nPreview:")
 
     for row in rows[:20]:
-        print(
-            f"  {row[0]} | {row[1]} | "
-            f"{row[2]} -> {row[3]}"
-        )
+        print(f"  {row[0]} | {row[1]} | {row[2]} -> {row[3]}")
 
     if len(rows) > 20:
-        print(
-            f"  ... and {len(rows) - 20} more"
-        )
+        print(f"  ... and {len(rows) - 20} more")
 
 
 if __name__ == "__main__":

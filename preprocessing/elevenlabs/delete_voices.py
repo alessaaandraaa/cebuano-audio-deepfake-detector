@@ -1,5 +1,5 @@
-"""
-delete_elevenlabs_ceb_voices.py
+r"""
+delete_voices.py
 
 Deletes ONLY ElevenLabs voices whose names start with:
 
@@ -13,7 +13,7 @@ Examples:
 Preset/default ElevenLabs voices are NOT touched.
 
 Usage:
-    python preprocessing\\elevenlabs\\delete_voices.py
+    python preprocessing\elevenlabs\delete_voices.py
 """
 
 import os
@@ -21,7 +21,6 @@ import sys
 import requests
 from pathlib import Path
 from dotenv import load_dotenv
-
 
 # ---------------------------------------------------------------------------
 # Paths
@@ -42,6 +41,7 @@ REQUEST_TIMEOUT = 30
 # Main
 # ---------------------------------------------------------------------------
 
+
 def main():
 
     load_dotenv(PROJECT_ROOT / ".env")
@@ -49,9 +49,7 @@ def main():
     api_key = os.environ.get("ELEVENLABS_API_KEY")
 
     if not api_key:
-        sys.exit(
-            "ERROR: ELEVENLABS_API_KEY not found."
-        )
+        sys.exit("ERROR: ELEVENLABS_API_KEY not found.")
 
     headers = {
         "xi-api-key": api_key,
@@ -71,13 +69,11 @@ def main():
         )
 
     except requests.RequestException as e:
-        sys.exit(
-            f"ERROR: Failed to connect to ElevenLabs: {e}"
-        )
+        sys.exit(f"ERROR: Failed to connect to ElevenLabs: {e}")
 
     if response.status_code != 200:
         sys.exit(
-            f"ERROR: Failed to load voices "
+            "ERROR: Failed to load voices "
             f"({response.status_code}): {response.text}"
         )
 
@@ -90,18 +86,12 @@ def main():
     # -----------------------------------------------------------------------
 
     ceb_voices = [
-        voice
-        for voice in voices
-        if voice.get("name", "").startswith("ceb-")
+        voice for voice in voices if voice.get("name", "").startswith("ceb-")
     ]
 
-    print(
-        f"Found {len(voices)} total voices."
-    )
+    print(f"Found {len(voices)} total voices.")
 
-    print(
-        f"Found {len(ceb_voices)} voices matching 'ceb-*'."
-    )
+    print(f"Found {len(ceb_voices)} voices matching 'ceb-*'.")
 
     if not ceb_voices:
         print("Nothing to delete.")
@@ -115,10 +105,7 @@ def main():
     print("-" * 60)
 
     for voice in ceb_voices:
-        print(
-            f"{voice.get('name')} | "
-            f"{voice.get('voice_id')}"
-        )
+        print(f"{voice.get('name')} | {voice.get('voice_id')}")
 
     print("-" * 60)
 
@@ -128,7 +115,7 @@ def main():
 
     confirm = input(
         f"\nDELETE THESE {len(ceb_voices)} ceb-* VOICES? "
-        f"Type 'DELETE' to continue: "
+        "Type 'DELETE' to continue: "
     )
 
     if confirm != "DELETE":
@@ -159,10 +146,7 @@ def main():
             failed += 1
             continue
 
-        print(
-            f"[{i}/{len(ceb_voices)}] "
-            f"Deleting {voice_name}..."
-        )
+        print(f"[{i}/{len(ceb_voices)}] Deleting {voice_name}...")
 
         try:
             response = requests.delete(
@@ -172,9 +156,7 @@ def main():
             )
 
         except requests.RequestException as e:
-            print(
-                f"  FAILED: {e}"
-            )
+            print(f"  FAILED: {e}")
 
             failed += 1
             continue
@@ -186,10 +168,7 @@ def main():
 
         else:
 
-            print(
-                f"  FAILED ({response.status_code}): "
-                f"{response.text}"
-            )
+            print(f"  FAILED ({response.status_code}): {response.text}")
 
             failed += 1
 
@@ -199,15 +178,9 @@ def main():
 
     print("\n" + "-" * 60)
 
-    print(
-        f"Done. "
-        f"{deleted} ceb-* voices deleted, "
-        f"{failed} failed."
-    )
+    print(f"Done. {deleted} ceb-* voices deleted, {failed} failed.")
 
-    print(
-        f"Preset/default voices were NOT targeted."
-    )
+    print(f"Preset/default voices were NOT targeted.")
 
 
 if __name__ == "__main__":

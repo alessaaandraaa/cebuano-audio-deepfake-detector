@@ -25,7 +25,8 @@ IMPORTANT:
     GROUND TRUTH vocabulary distribution for the deepfake dataset.
 
     It intentionally does NOT perform MMS-specific vocoder normalization
-    (like stripping diacritics or comma-padding). That belongs in generate_mms.py.
+    (like stripping diacritics or comma-padding). That belongs in
+    generate_mms.py.
 
     It DOES:
   - Remove parenthetical English glosses/translations.
@@ -50,7 +51,9 @@ IMPORTANT:
 
 Usage:
 
-    python preprocessing/extract_transcripts.py --root "C:/Users/Ninzz/Programming/PLD/up-dsp-pld/PLD/CEB" --out transcripts
+    python preprocessing/extract_transcripts.py \
+        --root "C:/Users/Ninzz/Programming/PLD/up-dsp-pld/PLD/CEB" \
+        --out transcripts
 """
 
 import argparse
@@ -59,7 +62,6 @@ import json
 import re
 import sys
 from pathlib import Path
-
 
 # ---------------------------------------------------------------------------
 # TOGGLES
@@ -77,43 +79,47 @@ DIGIT_MODE = "keep"
 # REGEX & NUMBER EXPANSION
 # ---------------------------------------------------------------------------
 
-LINE_PATTERN = re.compile(
-    r'^(\S+\.wav)\s+"([^"]*)"\s+(.*)$'
-)
+LINE_PATTERN = re.compile(r'^(\S+\.wav)\s+"([^"]*)"\s+(.*)$')
 
-PAREN_PATTERN = re.compile(
-    r'\s*\([^)]*\)'
-)
+PAREN_PATTERN = re.compile(r"\s*\([^)]*\)")
 
 # Matches a standalone single digit 1-9 (not part of a longer digit run,
 # e.g. it will NOT match the "1" in "10").
-SINGLE_DIGIT_PATTERN = re.compile(r'\b[1-9]\b')
+SINGLE_DIGIT_PATTERN = re.compile(r"\b[1-9]\b")
 
 # Load the JSON mapping (10-100) relative to where this script is located
 SCRIPT_DIR = Path(__file__).resolve().parent
 NUMBERS_JSON_PATH = SCRIPT_DIR / "number_mapping" / "numbers.json"
 
 # Default location of the per-utterance 1-9 pronunciation manifest.
-DEFAULT_DIGIT_MANIFEST_PATH = SCRIPT_DIR.parent / "manifests" / "original_pronunciations.tsv"
+DEFAULT_DIGIT_MANIFEST_PATH = (
+    SCRIPT_DIR.parent / "manifests" / "original_pronunciations.tsv"
+)
 
 try:
     with open(NUMBERS_JSON_PATH, "r", encoding="utf-8") as f:
         CEB_NUMBERS = json.load(f)
 except FileNotFoundError:
     print(f"ERROR: Could not find {NUMBERS_JSON_PATH}", file=sys.stderr)
-    print("Please ensure numbers.json exists in the preprocessing/ directory.", file=sys.stderr)
+    print(
+        "Please ensure numbers.json exists in the preprocessing/ directory.",
+        file=sys.stderr,
+    )
     sys.exit(1)
 
 # Sanity check: numbers.json should only cover 10-100. Single digits are
 # handled separately via the per-utterance manifest, so if numbers.json
 # ever grows a "1".."9" key it would silently shadow the per-utterance
 # lookup below. Warn loudly if that ever happens.
-_overlapping_keys = sorted(k for k in CEB_NUMBERS if k.isdigit() and 1 <= int(k) <= 9)
+_overlapping_keys = sorted(
+    k for k in CEB_NUMBERS if k.isdigit() and 1 <= int(k) <= 9
+)
 if _overlapping_keys:
     print(
-        f"WARNING: numbers.json contains single-digit keys {_overlapping_keys}; "
-        "these are expected to live in the per-utterance digit manifest instead "
-        "and will be ignored in favor of it.",
+        "WARNING: numbers.json contains single-digit keys"
+        f" {_overlapping_keys}; these are expected to live in the"
+        " per-utterance digit manifest instead and will be ignored in favor"
+        " of it.",
         file=sys.stderr,
     )
 
@@ -135,6 +141,7 @@ COMPILED_NUMBERS = [
 # PER-UTTERANCE SINGLE-DIGIT (1-9) PRONUNCIATION MANIFEST
 # ---------------------------------------------------------------------------
 
+
 def load_digit_pronunciations(tsv_path: Path):
     """
     Load the per-utterance 1-9 pronunciation manifest.
@@ -150,8 +157,9 @@ def load_digit_pronunciations(tsv_path: Path):
 
     if not tsv_path.exists():
         print(
-            f"WARNING: digit pronunciation manifest not found at {tsv_path}; "
-            "Random Digit single-digit (1-9) utterances will be left unexpanded.",
+            f"WARNING: digit pronunciation manifest not found at {tsv_path};"
+            " Random Digit single-digit (1-9) utterances will be left"
+            " unexpanded.",
             file=sys.stderr,
         )
         return mapping
@@ -180,7 +188,7 @@ def load_digit_pronunciations(tsv_path: Path):
             if wav in mapping and mapping[wav] != (transcript, saying):
                 print(
                     f"WARNING: duplicate wav_filename {wav!r} in digit "
-                    f"pronunciation manifest with a different entry "
+                    "pronunciation manifest with a different entry "
                     f"({mapping[wav]!r} vs {(transcript, saying)!r}); "
                     "keeping the first one seen.",
                     file=sys.stderr,
@@ -196,11 +204,12 @@ def load_digit_pronunciations(tsv_path: Path):
 # SOURCE FILTERING
 # ---------------------------------------------------------------------------
 
+
 def should_exclude_source(source_file: str) -> bool:
     return any(
-        source_file.startswith(prefix)
-        for prefix in EXCLUDE_SOURCE_PREFIXES
+        source_file.startswith(prefix) for prefix in EXCLUDE_SOURCE_PREFIXES
     )
+
 
 def is_digit_entry(source_file: str) -> bool:
     return source_file.strip().lower() == "random digit"
@@ -210,7 +219,10 @@ def is_digit_entry(source_file: str) -> bool:
 # TEXT CLEANING
 # ---------------------------------------------------------------------------
 
-def clean_text(raw: str, filename: str, source_file: str, digit_map: dict, stats: dict) -> str:
+
+def clean_text(
+    raw: str, filename: str, source_file: str, digit_map: dict, stats: dict
+) -> str:
     """
     Perform corpus-level transcript cleanup.
 
@@ -247,10 +259,13 @@ def clean_text(raw: str, filename: str, source_file: str, digit_map: dict, stats
             entry = digit_map.get(filename)
 
             if entry is None:
-                stats["single_digit_missing"] = stats.get("single_digit_missing", 0) + 1
+                stats["single_digit_missing"] = (
+                    stats.get("single_digit_missing", 0) + 1
+                )
                 print(
-                    f"WARNING: no pronunciation entry for {filename} "
-                    f"(digit {digit!r}, source=Random Digit); leaving digit unexpanded.",
+                    f"WARNING: no pronunciation entry for {filename} (digit"
+                    f" {digit!r}, source=Random Digit); leaving digit"
+                    " unexpanded.",
                     file=sys.stderr,
                 )
                 return digit
@@ -258,7 +273,9 @@ def clean_text(raw: str, filename: str, source_file: str, digit_map: dict, stats
             expected_digit, saying = entry
 
             if expected_digit != digit:
-                stats["single_digit_mismatch"] = stats.get("single_digit_mismatch", 0) + 1
+                stats["single_digit_mismatch"] = (
+                    stats.get("single_digit_mismatch", 0) + 1
+                )
                 print(
                     f"WARNING: digit mismatch for {filename}: transcript has "
                     f"{digit!r} but manifest says {expected_digit!r}; using "
@@ -266,7 +283,9 @@ def clean_text(raw: str, filename: str, source_file: str, digit_map: dict, stats
                     file=sys.stderr,
                 )
 
-            stats["single_digit_expanded"] = stats.get("single_digit_expanded", 0) + 1
+            stats["single_digit_expanded"] = (
+                stats.get("single_digit_expanded", 0) + 1
+            )
             return saying
 
         text = SINGLE_DIGIT_PATTERN.sub(_replace_single_digit, text)
@@ -276,7 +295,9 @@ def clean_text(raw: str, filename: str, source_file: str, digit_map: dict, stats
         # up here anyway, count it but don't touch it (no manifest
         # coverage is expected/guaranteed for non-Random-Digit sources).
         if SINGLE_DIGIT_PATTERN.search(text):
-            stats["single_digit_skipped_non_random"] = stats.get("single_digit_skipped_non_random", 0) + 1
+            stats["single_digit_skipped_non_random"] = (
+                stats.get("single_digit_skipped_non_random", 0) + 1
+            )
 
     # Expand multi-digit numbers (10-100) using the fixed corpus-wide
     # mapping. Applied regardless of source, since 10-100 pronunciation
@@ -294,6 +315,7 @@ def clean_text(raw: str, filename: str, source_file: str, digit_map: dict, stats
 # LOG FILE
 # ---------------------------------------------------------------------------
 
+
 def find_log_file(speaker_dir: Path):
     """
     Find the .log file directly inside a speaker folder.
@@ -305,7 +327,7 @@ def find_log_file(speaker_dir: Path):
 
     if len(log_files) > 1:
         print(
-            f"WARNING: multiple .log files in "
+            "WARNING: multiple .log files in "
             f"{speaker_dir}, using "
             f"{log_files[0].name}",
             file=sys.stderr,
@@ -317,6 +339,7 @@ def find_log_file(speaker_dir: Path):
 # ---------------------------------------------------------------------------
 # TRANSCRIPT PARSING
 # ---------------------------------------------------------------------------
+
 
 def parse_transcript_lines(log_path: Path):
     """
@@ -346,7 +369,10 @@ def parse_transcript_lines(log_path: Path):
 # LOGGING
 # ---------------------------------------------------------------------------
 
-def log_exclusion(speaker_id: str, filename: str, source_file: str, reason: str):
+
+def log_exclusion(
+    speaker_id: str, filename: str, source_file: str, reason: str
+):
     print(
         f"EXCLUDED [{speaker_id}] "
         f"{filename} | "
@@ -359,9 +385,13 @@ def log_exclusion(speaker_id: str, filename: str, source_file: str, reason: str)
 # MAIN
 # ---------------------------------------------------------------------------
 
+
 def main():
     parser = argparse.ArgumentParser(
-        description="Extract and clean corpus transcripts into one .txt file per speaker"
+        description=(
+            "Extract and clean corpus transcripts into one "
+            ".txt file per speaker"
+        )
     )
 
     parser.add_argument(
@@ -404,16 +434,23 @@ def main():
     speaker_dirs = sorted(d for d in root.iterdir() if d.is_dir())
 
     if not speaker_dirs:
-        print(f"ERROR: no speaker subfolders found under {root}", file=sys.stderr)
+        print(
+            f"ERROR: no speaker subfolders found under {root}", file=sys.stderr
+        )
         sys.exit(1)
 
     print(f"Found {len(speaker_dirs)} speaker folders under {root}")
     print(f"Output folder: {out_root.resolve()}")
     print(f"Excluded source prefixes: {EXCLUDE_SOURCE_PREFIXES}")
     print(f"Random Digit mode: {DIGIT_MODE!r}")
-    print(f"Loaded number expansion mapping (10-100) from: {NUMBERS_JSON_PATH.name}")
-    print(f"Loaded single-digit (1-9) pronunciation manifest from: {digit_map_path} "
-          f"({len(digit_map)} entries)")
+    print(
+        "Loaded number expansion mapping (10-100) from:"
+        f" {NUMBERS_JSON_PATH.name}"
+    )
+    print(
+        "Loaded single-digit (1-9) pronunciation manifest from:"
+        f" {digit_map_path} ({len(digit_map)} entries)"
+    )
     print("-" * 60)
 
     total_written = 0
@@ -430,29 +467,41 @@ def main():
 
         if not log_file:
             missing_logs.append(speaker_id)
-            print(f"WARNING: [{speaker_id}] no .log file found", file=sys.stderr)
+            print(
+                f"WARNING: [{speaker_id}] no .log file found", file=sys.stderr
+            )
             continue
 
         out_path = out_root / f"{speaker_id}.txt"
         speaker_utterances = []
 
-        for filename, source_file, raw_text in parse_transcript_lines(log_file):
+        for filename, source_file, raw_text in parse_transcript_lines(
+            log_file
+        ):
 
             if should_exclude_source(source_file):
                 total_excluded_source += 1
-                log_exclusion(speaker_id, filename, source_file, "source prefix excluded")
+                log_exclusion(
+                    speaker_id, filename, source_file, "source prefix excluded"
+                )
                 continue
 
             if is_digit_entry(source_file) and DIGIT_MODE == "exclude":
                 total_excluded_digit += 1
-                log_exclusion(speaker_id, filename, source_file, "Random Digit excluded")
+                log_exclusion(
+                    speaker_id, filename, source_file, "Random Digit excluded"
+                )
                 continue
 
-            cleaned = clean_text(raw_text, filename, source_file, digit_map, digit_stats)
+            cleaned = clean_text(
+                raw_text, filename, source_file, digit_map, digit_stats
+            )
 
             if not cleaned:
                 total_excluded_empty += 1
-                log_exclusion(speaker_id, filename, source_file, "empty after cleaning")
+                log_exclusion(
+                    speaker_id, filename, source_file, "empty after cleaning"
+                )
                 continue
 
             speaker_utterances.append(f"{filename}\t{cleaned}")
@@ -462,7 +511,10 @@ def main():
             with open(out_path, "w", encoding="utf-8") as f:
                 f.write("\n".join(speaker_utterances))
                 f.write("\n")
-            print(f"[{speaker_id}] wrote {len(speaker_utterances)} utterances -> {out_path}")
+            print(
+                f"[{speaker_id}] wrote {len(speaker_utterances)} "
+                f"utterances -> {out_path}"
+            )
 
     if missing_logs:
         print(
@@ -477,14 +529,30 @@ def main():
     print(f"Excluded (source prefix)     : {total_excluded_source}")
     print(f"Excluded (digit mode)        : {total_excluded_digit}")
     print(f"Excluded (empty after clean) : {total_excluded_empty}")
-    print(f"Speakers processed           : {len(speaker_dirs) - len(missing_logs)}")
+    print(
+        "Speakers processed           :"
+        f" {len(speaker_dirs) - len(missing_logs)}"
+    )
     print(f"Speakers missing .log        : {len(missing_logs)}")
     print("-" * 60)
     print("Single-digit (1-9) expansion (Random Digit sources only):")
-    print(f"  Expanded via manifest              : {digit_stats.get('single_digit_expanded', 0)}")
-    print(f"  Missing manifest entry             : {digit_stats.get('single_digit_missing', 0)}")
-    print(f"  Digit/manifest mismatch            : {digit_stats.get('single_digit_mismatch', 0)}")
-    print(f"  Bare digit in non-Random source    : {digit_stats.get('single_digit_skipped_non_random', 0)} (left unexpanded)")
+    print(
+        "  Expanded via manifest              :"
+        f" {digit_stats.get('single_digit_expanded', 0)}"
+    )
+    print(
+        "  Missing manifest entry             :"
+        f" {digit_stats.get('single_digit_missing', 0)}"
+    )
+    print(
+        "  Digit/manifest mismatch            :"
+        f" {digit_stats.get('single_digit_mismatch', 0)}"
+    )
+    print(
+        "  Bare digit in non-Random source    :"
+        f" {digit_stats.get('single_digit_skipped_non_random', 0)} (left"
+        " unexpanded)"
+    )
 
 
 if __name__ == "__main__":

@@ -1,4 +1,4 @@
-"""
+r"""
 generate_elevenlabs.py
 
 Generates Cebuano synthetic speech using ElevenLabs cloned voices.
@@ -99,36 +99,23 @@ from pathlib import Path
 import requests
 from dotenv import load_dotenv
 
-
 # ---------------------------------------------------------------------------
 # PROJECT PATHS
 # ---------------------------------------------------------------------------
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
-DEFAULT_TRANSCRIPTS_ROOT = (
-    PROJECT_ROOT / "transcripts"
-)
+DEFAULT_TRANSCRIPTS_ROOT = PROJECT_ROOT / "transcripts"
 
-DEFAULT_REFERENCE_ROOT = (
-    PROJECT_ROOT / "elevenlabs-reference"
-)
+DEFAULT_REFERENCE_ROOT = PROJECT_ROOT / "elevenlabs-reference"
 
-DEFAULT_OUTPUT_ROOT = (
-    PROJECT_ROOT / "data" / "processed" / "elevenlabs"
-)
+DEFAULT_OUTPUT_ROOT = PROJECT_ROOT / "data" / "processed" / "elevenlabs"
 
 DEFAULT_SPEAKER_MANIFEST = (
-    PROJECT_ROOT
-    / "manifests"
-    / "elevenlabs_selected_speakers.csv"
+    PROJECT_ROOT / "manifests" / "elevenlabs_selected_speakers.csv"
 )
 
-DEFAULT_VOICE_ID_FILE = (
-    PROJECT_ROOT
-    / "manifests"
-    / "elevenlabs_voice_ids.txt"
-)
+DEFAULT_VOICE_ID_FILE = PROJECT_ROOT / "manifests" / "elevenlabs_voice_ids.txt"
 
 
 # ---------------------------------------------------------------------------
@@ -142,9 +129,7 @@ BATCH_SIZE = 30
 # ELEVENLABS
 # ---------------------------------------------------------------------------
 
-API_URL_TEMPLATE = (
-    "https://api.elevenlabs.io/v1/text-to-speech/{voice_id}"
-)
+API_URL_TEMPLATE = "https://api.elevenlabs.io/v1/text-to-speech/{voice_id}"
 
 MODEL_ID = "eleven_v3"
 
@@ -158,6 +143,7 @@ REQUEST_DELAY = 0.25
 # ---------------------------------------------------------------------------
 # SPEAKER MANIFEST
 # ---------------------------------------------------------------------------
+
 
 def load_selected_speakers(
     manifest_path: Path,
@@ -213,15 +199,11 @@ def load_selected_speakers(
                     continue
 
                 # Optional header.
-                if (
-                    line_number == 1
-                    and speaker_id.lower()
-                    in {
-                        "speaker_id",
-                        "speaker",
-                        "id",
-                    }
-                ):
+                if line_number == 1 and speaker_id.lower() in {
+                    "speaker_id",
+                    "speaker",
+                    "id",
+                }:
                     continue
 
                 speakers.append(speaker_id)
@@ -236,14 +218,11 @@ def load_selected_speakers(
         sys.exit(1)
 
     # Remove duplicates while preserving order.
-    speakers = list(
-        dict.fromkeys(speakers)
-    )
+    speakers = list(dict.fromkeys(speakers))
 
     if not speakers:
         print(
-            "ERROR: no speakers found in:\n"
-            f"  {manifest_path}",
+            f"ERROR: no speakers found in:\n  {manifest_path}",
             file=sys.stderr,
         )
         sys.exit(1)
@@ -254,6 +233,7 @@ def load_selected_speakers(
 # ---------------------------------------------------------------------------
 # BATCH SELECTION
 # ---------------------------------------------------------------------------
+
 
 def select_batch(
     speakers: list[str],
@@ -280,24 +260,14 @@ def select_batch(
         )
         sys.exit(1)
 
-    start = (
-        (batch_number - 1)
-        * BATCH_SIZE
-    )
+    start = (batch_number - 1) * BATCH_SIZE
 
-    end = (
-        start
-        + BATCH_SIZE
-    )
+    end = start + BATCH_SIZE
 
     batch = speakers[start:end]
 
     if not batch:
-        total_batches = (
-            len(speakers)
-            + BATCH_SIZE
-            - 1
-        ) // BATCH_SIZE
+        total_batches = (len(speakers) + BATCH_SIZE - 1) // BATCH_SIZE
 
         print(
             f"ERROR: batch {batch_number} does not exist.",
@@ -328,6 +298,7 @@ def select_batch(
 # VOICE IDS
 # ---------------------------------------------------------------------------
 
+
 def load_voice_ids(
     voice_id_path: Path,
 ) -> dict[str, str]:
@@ -349,8 +320,7 @@ def load_voice_ids(
 
     if not voice_id_path.exists():
         print(
-            "ERROR: voice ID file not found:\n"
-            f"  {voice_id_path}",
+            f"ERROR: voice ID file not found:\n  {voice_id_path}",
             file=sys.stderr,
         )
         sys.exit(1)
@@ -402,17 +372,14 @@ def load_voice_ids(
 
     except Exception as e:
         print(
-            "ERROR: failed to read voice ID file:\n"
-            f"  {voice_id_path}\n"
-            f"  {e}",
+            f"ERROR: failed to read voice ID file:\n  {voice_id_path}\n  {e}",
             file=sys.stderr,
         )
         sys.exit(1)
 
     if not voice_ids:
         print(
-            "ERROR: no voice IDs found in:\n"
-            f"  {voice_id_path}",
+            f"ERROR: no voice IDs found in:\n  {voice_id_path}",
             file=sys.stderr,
         )
         sys.exit(1)
@@ -423,6 +390,7 @@ def load_voice_ids(
 # ---------------------------------------------------------------------------
 # REFERENCE CLIPS
 # ---------------------------------------------------------------------------
+
 
 def load_reference_filenames(
     reference_root: Path,
@@ -450,10 +418,7 @@ def load_reference_filenames(
         }
     """
 
-    speaker_dir = (
-        reference_root
-        / speaker_id
-    )
+    speaker_dir = reference_root / speaker_id
 
     if not speaker_dir.exists():
         print(
@@ -473,16 +438,13 @@ def load_reference_filenames(
         )
         return set()
 
-    return {
-        path.name
-        for path in speaker_dir.iterdir()
-        if path.is_file()
-    }
+    return {path.name for path in speaker_dir.iterdir() if path.is_file()}
 
 
 # ---------------------------------------------------------------------------
 # TRANSCRIPTS
 # ---------------------------------------------------------------------------
+
 
 def load_transcript(
     transcript_path: Path,
@@ -502,8 +464,7 @@ def load_transcript(
 
     if not transcript_path.exists():
         print(
-            "WARNING: transcript not found:\n"
-            f"  {transcript_path}",
+            f"WARNING: transcript not found:\n  {transcript_path}",
             file=sys.stderr,
         )
         return []
@@ -523,9 +484,7 @@ def load_transcript(
                 start=1,
             ):
 
-                line = line.rstrip(
-                    "\n\r"
-                )
+                line = line.rstrip("\n\r")
 
                 if not line.strip():
                     continue
@@ -574,9 +533,7 @@ def load_transcript(
 
     except Exception as e:
         print(
-            "ERROR: failed to read transcript:\n"
-            f"  {transcript_path}\n"
-            f"  {e}",
+            f"ERROR: failed to read transcript:\n  {transcript_path}\n  {e}",
             file=sys.stderr,
         )
 
@@ -586,6 +543,7 @@ def load_transcript(
 # ---------------------------------------------------------------------------
 # ELEVENLABS GENERATION
 # ---------------------------------------------------------------------------
+
 
 def generate_audio(
     api_key: str,
@@ -600,9 +558,7 @@ def generate_audio(
         language_code = "ceb"
     """
 
-    url = API_URL_TEMPLATE.format(
-        voice_id=voice_id
-    )
+    url = API_URL_TEMPLATE.format(voice_id=voice_id)
 
     headers = {
         "xi-api-key": api_key,
@@ -664,6 +620,7 @@ def generate_audio(
 # SPEAKER PROCESSING
 # ---------------------------------------------------------------------------
 
+
 def process_speaker(
     speaker_id: str,
     voice_id: str,
@@ -685,14 +642,11 @@ def process_speaker(
         failed
     """
 
-    transcript_path = (
-        transcripts_root
-        / f"{speaker_id}.txt"
-    )
+    transcript_path = transcripts_root / f"{speaker_id}.txt"
 
     if not transcript_path.exists():
         print(
-            f"\nWARNING: no transcript for speaker "
+            "\nWARNING: no transcript for speaker "
             f"{speaker_id}:\n"
             f"  {transcript_path}",
             file=sys.stderr,
@@ -700,26 +654,19 @@ def process_speaker(
 
         return 0, 0, 0, 0
 
-    reference_filenames = (
-        load_reference_filenames(
-            reference_root,
-            speaker_id,
-        )
+    reference_filenames = load_reference_filenames(
+        reference_root,
+        speaker_id,
     )
 
-    utterances = load_transcript(
-        transcript_path
-    )
+    utterances = load_transcript(transcript_path)
 
     if limit is not None:
         utterances = utterances[:limit]
 
     # IMPORTANT:
     # Each speaker gets their own output folder.
-    speaker_output_root = (
-        output_root
-        / speaker_id
-    )
+    speaker_output_root = output_root / speaker_id
 
     speaker_output_root.mkdir(
         parents=True,
@@ -731,48 +678,25 @@ def process_speaker(
     print(f"SPEAKER: {speaker_id}")
     print("=" * 70)
 
-    print(
-        f"Voice ID          : {voice_id}"
-    )
+    print(f"Voice ID          : {voice_id}")
 
-    print(
-        f"Transcript        : "
-        f"{transcript_path}"
-    )
+    print(f"Transcript        : {transcript_path}")
 
-    print(
-        f"Output folder     : "
-        f"{speaker_output_root}"
-    )
+    print(f"Output folder     : {speaker_output_root}")
 
-    print(
-        f"Reference clips   : "
-        f"{len(reference_filenames)}"
-    )
+    print(f"Reference clips   : {len(reference_filenames)}")
 
-    print(
-        f"Utterances loaded : "
-        f"{len(utterances)}"
-    )
+    print(f"Utterances loaded : {len(utterances)}")
 
     if limit is not None:
-        print(
-            f"Test limit        : "
-            f"{limit}"
-        )
+        print(f"Test limit        : {limit}")
 
     if reference_filenames:
         print()
-        print(
-            "Reference files that will be skipped:"
-        )
+        print("Reference files that will be skipped:")
 
-        for filename in sorted(
-            reference_filenames
-        ):
-            print(
-                f"  - {filename}"
-            )
+        for filename in sorted(reference_filenames):
+            print(f"  - {filename}")
 
     print("-" * 70)
 
@@ -798,9 +722,7 @@ def process_speaker(
             skipped_reference += 1
 
             print(
-                f"[{index}/{len(utterances)}] "
-                f"SKIP REFERENCE: "
-                f"{wav_filename}"
+                f"[{index}/{len(utterances)}] SKIP REFERENCE: {wav_filename}"
             )
 
             continue
@@ -817,35 +739,21 @@ def process_speaker(
         #   0200.111020.092714.0091.2.wav
         # --------------------------------------------------------------
 
-        input_stem = Path(
-            wav_filename
-        ).stem
+        input_stem = Path(wav_filename).stem
 
-        output_filename = (
-            f"{input_stem}.2.wav"
-        )
+        output_filename = f"{input_stem}.2.wav"
 
-        output_path = (
-            speaker_output_root
-            / output_filename
-        )
+        output_path = speaker_output_root / output_filename
 
         # --------------------------------------------------------------
         # Skip existing
         # --------------------------------------------------------------
 
-        if (
-            output_path.exists()
-            and not overwrite
-        ):
+        if output_path.exists() and not overwrite:
 
             skipped_existing += 1
 
-            print(
-                f"[{index}/{len(utterances)}] "
-                f"EXISTS: "
-                f"{output_path.name}"
-            )
+            print(f"[{index}/{len(utterances)}] EXISTS: {output_path.name}")
 
             continue
 
@@ -853,15 +761,9 @@ def process_speaker(
         # Generate
         # --------------------------------------------------------------
 
-        print(
-            f"[{index}/{len(utterances)}] "
-            f"GENERATING: "
-            f"{wav_filename}"
-        )
+        print(f"[{index}/{len(utterances)}] GENERATING: {wav_filename}")
 
-        print(
-            f"    Text: {text}"
-        )
+        print(f"    Text: {text}")
 
         audio = generate_audio(
             api_key=api_key,
@@ -895,8 +797,7 @@ def process_speaker(
             failed += 1
 
             print(
-                f"    SAVE ERROR: "
-                f"{output_path}: {e}",
+                f"    SAVE ERROR: {output_path}: {e}",
                 file=sys.stderr,
             )
 
@@ -904,15 +805,10 @@ def process_speaker(
 
         generated += 1
 
-        print(
-            f"    SAVED: "
-            f"{output_path}"
-        )
+        print(f"    SAVED: {output_path}")
 
         if REQUEST_DELAY > 0:
-            time.sleep(
-                REQUEST_DELAY
-            )
+            time.sleep(REQUEST_DELAY)
 
     print("-" * 70)
 
@@ -936,76 +832,49 @@ def process_speaker(
 # MAIN
 # ---------------------------------------------------------------------------
 
+
 def main():
 
     parser = argparse.ArgumentParser(
         description=(
-            "Generate Cebuano ElevenLabs speech "
-            "for selected cloned speakers."
+            "Generate Cebuano ElevenLabs speech for selected cloned speakers."
         )
     )
 
     parser.add_argument(
         "--transcripts",
-        default=str(
-            DEFAULT_TRANSCRIPTS_ROOT
-        ),
-        help=(
-            "Folder containing speaker transcript "
-            "files."
-        ),
+        default=str(DEFAULT_TRANSCRIPTS_ROOT),
+        help="Folder containing speaker transcript files.",
     )
 
     parser.add_argument(
         "--reference-root",
-        default=str(
-            DEFAULT_REFERENCE_ROOT
-        ),
-        help=(
-            "Root folder containing per-speaker "
-            "ElevenLabs reference clips."
-        ),
+        default=str(DEFAULT_REFERENCE_ROOT),
+        help="Root folder containing per-speaker ElevenLabs reference clips.",
     )
 
     parser.add_argument(
         "--out",
-        default=str(
-            DEFAULT_OUTPUT_ROOT
-        ),
-        help=(
-            "Output root. Each speaker gets "
-            "their own subfolder."
-        ),
+        default=str(DEFAULT_OUTPUT_ROOT),
+        help="Output root. Each speaker gets their own subfolder.",
     )
 
     parser.add_argument(
         "--manifest",
-        default=str(
-            DEFAULT_SPEAKER_MANIFEST
-        ),
-        help=(
-            "ElevenLabs selected-speaker CSV."
-        ),
+        default=str(DEFAULT_SPEAKER_MANIFEST),
+        help="ElevenLabs selected-speaker CSV.",
     )
 
     parser.add_argument(
         "--voice-ids",
-        default=str(
-            DEFAULT_VOICE_ID_FILE
-        ),
-        help=(
-            "File containing speaker -> ElevenLabs "
-            "voice ID mappings."
-        ),
+        default=str(DEFAULT_VOICE_ID_FILE),
+        help="File containing speaker -> ElevenLabs voice ID mappings.",
     )
 
     parser.add_argument(
         "--speaker",
         default=None,
-        help=(
-            "Process only one speaker. "
-            "Example: --speaker 0202"
-        ),
+        help="Process only one speaker. Example: --speaker 0202",
     )
 
     parser.add_argument(
@@ -1045,13 +914,9 @@ def main():
     # Validate mutually exclusive selection modes
     # ------------------------------------------------------------------
 
-    if (
-        args.speaker is not None
-        and args.batch is not None
-    ):
+    if args.speaker is not None and args.batch is not None:
         print(
-            "ERROR: use either --speaker OR --batch, "
-            "not both.",
+            "ERROR: use either --speaker OR --batch, not both.",
             file=sys.stderr,
         )
         sys.exit(1)
@@ -1060,10 +925,7 @@ def main():
     # Validate batch
     # ------------------------------------------------------------------
 
-    if (
-        args.batch is not None
-        and args.batch <= 0
-    ):
+    if args.batch is not None and args.batch <= 0:
         print(
             "ERROR: --batch must be 1 or greater.",
             file=sys.stderr,
@@ -1074,10 +936,7 @@ def main():
     # Validate limit
     # ------------------------------------------------------------------
 
-    if (
-        args.limit is not None
-        and args.limit <= 0
-    ):
+    if args.limit is not None and args.limit <= 0:
         print(
             "ERROR: --limit must be greater than 0.",
             file=sys.stderr,
@@ -1088,13 +947,9 @@ def main():
     # Load environment
     # ------------------------------------------------------------------
 
-    load_dotenv(
-        PROJECT_ROOT / ".env"
-    )
+    load_dotenv(PROJECT_ROOT / ".env")
 
-    api_key = os.environ.get(
-        "ELEVENLABS_API_KEY"
-    )
+    api_key = os.environ.get("ELEVENLABS_API_KEY")
 
     if not api_key:
         print(
@@ -1107,35 +962,21 @@ def main():
     # Resolve paths
     # ------------------------------------------------------------------
 
-    transcripts_root = Path(
-        args.transcripts
-    )
+    transcripts_root = Path(args.transcripts)
 
-    reference_root = Path(
-        args.reference_root
-    )
+    reference_root = Path(args.reference_root)
 
-    output_root = Path(
-        args.out
-    )
+    output_root = Path(args.out)
 
-    manifest_path = Path(
-        args.manifest
-    )
+    manifest_path = Path(args.manifest)
 
-    voice_id_path = Path(
-        args.voice_ids
-    )
+    voice_id_path = Path(args.voice_ids)
 
     # ------------------------------------------------------------------
     # Load all speakers
     # ------------------------------------------------------------------
 
-    all_speakers = (
-        load_selected_speakers(
-            manifest_path
-        )
-    )
+    all_speakers = load_selected_speakers(manifest_path)
 
     # ------------------------------------------------------------------
     # Select speakers
@@ -1152,13 +993,9 @@ def main():
             )
             sys.exit(1)
 
-        selected_speakers = [
-            args.speaker
-        ]
+        selected_speakers = [args.speaker]
 
-        selection_description = (
-            f"single speaker {args.speaker}"
-        )
+        selection_description = f"single speaker {args.speaker}"
 
     elif args.batch is not None:
 
@@ -1167,21 +1004,13 @@ def main():
             args.batch,
         )
 
-        start_number = (
-            (args.batch - 1)
-            * BATCH_SIZE
-            + 1
-        )
+        start_number = (args.batch - 1) * BATCH_SIZE + 1
 
-        end_number = (
-            start_number
-            + len(selected_speakers)
-            - 1
-        )
+        end_number = start_number + len(selected_speakers) - 1
 
         selection_description = (
             f"batch {args.batch} "
-            f"(manifest speakers "
+            "(manifest speakers "
             f"{start_number}-{end_number})"
         )
 
@@ -1189,17 +1018,13 @@ def main():
 
         selected_speakers = all_speakers
 
-        selection_description = (
-            "all speakers"
-        )
+        selection_description = "all speakers"
 
     # ------------------------------------------------------------------
     # Load voice IDs
     # ------------------------------------------------------------------
 
-    voice_ids = load_voice_ids(
-        voice_id_path
-    )
+    voice_ids = load_voice_ids(voice_id_path)
 
     # ------------------------------------------------------------------
     # IMPORTANT:
@@ -1211,15 +1036,11 @@ def main():
     # ------------------------------------------------------------------
 
     speakers_with_voice_ids = [
-        speaker
-        for speaker in selected_speakers
-        if speaker in voice_ids
+        speaker for speaker in selected_speakers if speaker in voice_ids
     ]
 
     speakers_without_voice_ids = [
-        speaker
-        for speaker in selected_speakers
-        if speaker not in voice_ids
+        speaker for speaker in selected_speakers if speaker not in voice_ids
     ]
 
     if speakers_without_voice_ids:
@@ -1232,9 +1053,7 @@ def main():
         )
 
         for speaker in speakers_without_voice_ids:
-            print(
-                f"  - {speaker}"
-            )
+            print(f"  - {speaker}")
 
         print()
 
@@ -1257,77 +1076,36 @@ def main():
     print("ELEVENLABS CEBUANO GENERATION")
     print("=" * 70)
 
-    print(
-        f"Model             : {MODEL_ID}"
-    )
+    print(f"Model             : {MODEL_ID}")
 
-    print(
-        f"Language code     : {LANGUAGE_CODE}"
-    )
+    print(f"Language code     : {LANGUAGE_CODE}")
 
-    print(
-        f"Batch size        : {BATCH_SIZE}"
-    )
+    print(f"Batch size        : {BATCH_SIZE}")
 
-    print(
-        f"Selection         : "
-        f"{selection_description}"
-    )
+    print(f"Selection         : {selection_description}")
 
-    print(
-        f"Selected speakers : "
-        f"{len(selected_speakers)}"
-    )
+    print(f"Selected speakers : {len(selected_speakers)}")
 
-    print(
-        f"With voice IDs    : "
-        f"{len(speakers_with_voice_ids)}"
-    )
+    print(f"With voice IDs    : {len(speakers_with_voice_ids)}")
 
-    print(
-        f"Missing voice IDs : "
-        f"{len(speakers_without_voice_ids)}"
-    )
+    print(f"Missing voice IDs : {len(speakers_without_voice_ids)}")
 
-    print(
-        f"Transcript root   : "
-        f"{transcripts_root.resolve()}"
-    )
+    print(f"Transcript root   : {transcripts_root.resolve()}")
 
-    print(
-        f"Reference root    : "
-        f"{reference_root.resolve()}"
-    )
+    print(f"Reference root    : {reference_root.resolve()}")
 
-    print(
-        f"Output root       : "
-        f"{output_root.resolve()}"
-    )
+    print(f"Output root       : {output_root.resolve()}")
 
-    print(
-        f"Speaker manifest  : "
-        f"{manifest_path.resolve()}"
-    )
+    print(f"Speaker manifest  : {manifest_path.resolve()}")
 
-    print(
-        f"Voice ID file     : "
-        f"{voice_id_path.resolve()}"
-    )
+    print(f"Voice ID file     : {voice_id_path.resolve()}")
 
     if args.limit is not None:
-        print(
-            f"Limit             : "
-            f"first {args.limit} per speaker"
-        )
+        print(f"Limit             : first {args.limit} per speaker")
     else:
-        print(
-            "Limit             : none"
-        )
+        print("Limit             : none")
 
-    print(
-        f"Overwrite         : "
-        f"{args.overwrite}"
-    )
+    print(f"Overwrite         : {args.overwrite}")
 
     print("=" * 70)
 
@@ -1344,9 +1122,7 @@ def main():
 
     for speaker_id in speakers_with_voice_ids:
 
-        voice_id = voice_ids[
-            speaker_id
-        ]
+        voice_id = voice_ids[speaker_id]
 
         (
             generated,
@@ -1366,13 +1142,9 @@ def main():
 
         total_generated += generated
 
-        total_reference_skipped += (
-            skipped_reference
-        )
+        total_reference_skipped += skipped_reference
 
-        total_existing_skipped += (
-            skipped_existing
-        )
+        total_existing_skipped += skipped_existing
 
         total_failed += failed
 
@@ -1387,50 +1159,23 @@ def main():
     print("DONE")
     print("=" * 70)
 
-    print(
-        f"Selection                : "
-        f"{selection_description}"
-    )
+    print(f"Selection                : {selection_description}")
 
-    print(
-        f"Speakers selected        : "
-        f"{len(selected_speakers)}"
-    )
+    print(f"Speakers selected        : {len(selected_speakers)}")
 
-    print(
-        f"Speakers processed       : "
-        f"{speakers_processed}"
-    )
+    print(f"Speakers processed       : {speakers_processed}")
 
-    print(
-        f"Missing voice IDs        : "
-        f"{len(speakers_without_voice_ids)}"
-    )
+    print(f"Missing voice IDs        : {len(speakers_without_voice_ids)}")
 
-    print(
-        f"Audio generated          : "
-        f"{total_generated}"
-    )
+    print(f"Audio generated          : {total_generated}")
 
-    print(
-        f"Reference clips skipped  : "
-        f"{total_reference_skipped}"
-    )
+    print(f"Reference clips skipped  : {total_reference_skipped}")
 
-    print(
-        f"Existing files skipped   : "
-        f"{total_existing_skipped}"
-    )
+    print(f"Existing files skipped   : {total_existing_skipped}")
 
-    print(
-        f"Generation failures      : "
-        f"{total_failed}"
-    )
+    print(f"Generation failures      : {total_failed}")
 
-    print(
-        f"Output folder            : "
-        f"{output_root.resolve()}"
-    )
+    print(f"Output folder            : {output_root.resolve()}")
 
     print("=" * 70)
 

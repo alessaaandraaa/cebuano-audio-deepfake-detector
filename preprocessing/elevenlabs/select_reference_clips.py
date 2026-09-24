@@ -1,4 +1,4 @@
-"""
+r"""
 select_reference_clips.py
 
 For each speaker listed in elevenlabs_selected_speakers.csv, scans that
@@ -9,13 +9,14 @@ at least --min-duration seconds long, and MOVES them into:
 
 Usage:
     python select_reference_clips.py ^
-        --csv manifests\\elevenlabs_selected_speakers.csv ^
-        --audio-root data\\processed\\bonafide ^
+        --csv manifests\elevenlabs_selected_speakers.csv ^
+        --audio-root data\processed\bonafide ^
         --out elevenlabs-reference
 
 Options:
     --min-duration   Minimum clip duration in seconds (default 10.0)
-    --min-per-speaker / --max-per-speaker   How many clips to select (default 3 / 5)
+    --min-per-speaker / --max-per-speaker
+                     How many clips to select (default 3 / 5)
     --seed           Random seed for reproducibility (default 42)
     --dry-run        Print what would be moved without actually moving anything
 """
@@ -41,7 +42,10 @@ def load_speaker_ids(csv_path: Path):
     with open(csv_path, "r", encoding="utf-8", newline="") as f:
         reader = csv.DictReader(f)
         if not reader.fieldnames or "speaker_id" not in reader.fieldnames:
-            print("ERROR: CSV must contain a 'speaker_id' column.", file=sys.stderr)
+            print(
+                "ERROR: CSV must contain a 'speaker_id' column.",
+                file=sys.stderr,
+            )
             sys.exit(1)
         for row in reader:
             sid = row["speaker_id"].strip()
@@ -89,7 +93,7 @@ def select_toward_total(clips, min_total, min_count, max_count):
         if len(selected) >= max_count:
             break
 
-        is_last_slot = (len(selected) == max_count - 1)
+        is_last_slot = len(selected) == max_count - 1
         target_met = len(selected) >= min_count and total >= min_total
 
         if target_met:
@@ -126,15 +130,56 @@ def select_toward_total(clips, min_total, min_count, max_count):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Select and move reference clips per speaker")
-    parser.add_argument("--csv", required=True, help="Path to elevenlabs_selected_speakers.csv")
-    parser.add_argument("--audio-root", required=True, help="Root folder containing speaker subfolders of bonafide audio")
-    parser.add_argument("--out", required=True, help="Output root folder (e.g. elevenlabs-reference)")
-    parser.add_argument("--min-total-duration", type=float, default=12.0, help="Minimum TOTAL duration (seconds) across selected clips per speaker (default 12s to buffer for leading-silence trimming)")
-    parser.add_argument("--min-per-speaker", type=int, default=1, help="Minimum number of clips to select, even if total duration is already met")
-    parser.add_argument("--max-per-speaker", type=int, default=5, help="Never select more than this many clips, even if total duration isn't met")
+    parser = argparse.ArgumentParser(
+        description="Select and move reference clips per speaker"
+    )
+    parser.add_argument(
+        "--csv", required=True, help="Path to elevenlabs_selected_speakers.csv"
+    )
+    parser.add_argument(
+        "--audio-root",
+        required=True,
+        help="Root folder containing speaker subfolders of bonafide audio",
+    )
+    parser.add_argument(
+        "--out",
+        required=True,
+        help="Output root folder (e.g. elevenlabs-reference)",
+    )
+    parser.add_argument(
+        "--min-total-duration",
+        type=float,
+        default=12.0,
+        help=(
+            "Minimum TOTAL duration (seconds) across selected "
+            "clips per speaker (default 12s to buffer for "
+            "leading-silence trimming)"
+        ),
+    )
+    parser.add_argument(
+        "--min-per-speaker",
+        type=int,
+        default=1,
+        help=(
+            "Minimum number of clips to select, even if total "
+            "duration is already met"
+        ),
+    )
+    parser.add_argument(
+        "--max-per-speaker",
+        type=int,
+        default=5,
+        help=(
+            "Never select more than this many clips, even if "
+            "total duration isn't met"
+        ),
+    )
     parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--dry-run", action="store_true", help="Print selections without moving files")
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Print selections without moving files",
+    )
     args = parser.parse_args()
 
     random.seed(args.seed)
@@ -162,14 +207,21 @@ def main():
         speaker_dir = audio_root / speaker_id
 
         if not speaker_dir.exists():
-            print(f"[{speaker_id}] WARNING: no audio folder found at {speaker_dir}", file=sys.stderr)
+            print(
+                f"[{speaker_id}] WARNING: no audio folder found at"
+                f" {speaker_dir}",
+                file=sys.stderr,
+            )
             summary.append((speaker_id, 0, "missing folder"))
             continue
 
         clips = get_all_clips(speaker_dir)
 
         if not clips:
-            print(f"[{speaker_id}] WARNING: no audio files found", file=sys.stderr)
+            print(
+                f"[{speaker_id}] WARNING: no audio files found",
+                file=sys.stderr,
+            )
             summary.append((speaker_id, 0, 0.0, "no clips found"))
             continue
 
@@ -182,10 +234,17 @@ def main():
 
         met_target = total >= args.min_total_duration
         note = (
-            f"{len(clips)} clips available, total {'reached' if met_target else 'FELL SHORT of'} {args.min_total_duration}s target"
+            f"{len(clips)} clips available, total"
+            f" {'reached' if met_target else 'FELL SHORT of'}"
+            f" {args.min_total_duration}s target"
         )
         if not met_target:
-            print(f"[{speaker_id}] WARNING: only reached {total:.2f}s across {len(selected)} clips (target {args.min_total_duration}s, max {args.max_per_speaker} clips)", file=sys.stderr)
+            print(
+                f"[{speaker_id}] WARNING: only reached {total:.2f}s across"
+                f" {len(selected)} clips (target {args.min_total_duration}s,"
+                f" max {args.max_per_speaker} clips)",
+                file=sys.stderr,
+            )
 
         dest_dir = out_root / speaker_id
         if not args.dry_run:
@@ -194,12 +253,20 @@ def main():
         for src_path, duration in selected:
             dest_path = dest_dir / src_path.name
             if args.dry_run:
-                print(f"[{speaker_id}] WOULD MOVE  {src_path}  ({duration:.2f}s) -> {dest_path}")
+                print(
+                    f"[{speaker_id}] WOULD MOVE  {src_path}  ({duration:.2f}s)"
+                    f" -> {dest_path}"
+                )
             else:
                 shutil.move(str(src_path), str(dest_path))
-                print(f"[{speaker_id}] moved {src_path.name} ({duration:.2f}s)")
+                print(
+                    f"[{speaker_id}] moved {src_path.name} ({duration:.2f}s)"
+                )
 
-        print(f"[{speaker_id}] selected {len(selected)} clips, total {total:.2f}s")
+        print(
+            f"[{speaker_id}] selected {len(selected)} clips, total"
+            f" {total:.2f}s"
+        )
         summary.append((speaker_id, len(selected), total, note))
 
     print()
@@ -207,10 +274,16 @@ def main():
     print("SUMMARY")
     print("=" * 60)
     for speaker_id, n_selected, total_dur, note in summary:
-        print(f"  [{speaker_id}] selected {n_selected} clips, {total_dur:.2f}s total  ({note})")
+        print(
+            f"  [{speaker_id}] selected {n_selected} clips, {total_dur:.2f}s"
+            f" total  ({note})"
+        )
 
     total_selected = sum(n for _, n, _, _ in summary)
-    print(f"\nTotal clips {'that would be' if args.dry_run else ''} moved: {total_selected}")
+    print(
+        f"\nTotal clips {'that would be' if args.dry_run else ''} moved:"
+        f" {total_selected}"
+    )
     print(f"Destination: {out_root.resolve()}")
 
     if args.dry_run:

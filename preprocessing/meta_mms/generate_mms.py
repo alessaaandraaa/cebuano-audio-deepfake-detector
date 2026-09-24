@@ -1,4 +1,4 @@
-"""
+r"""
 generate_mms.py
 
 Generates synthetic Cebuano speech using Meta MMS TTS.
@@ -46,14 +46,17 @@ Raw/original audio is never modified.
 
 Usage:
 
-    python preprocessing\\meta_mms\\generate_mms.py --speakers manifests\\mms_selected_speakers.csv --transcripts transcripts_mms --out data\\processed\\meta-mms
+    python preprocessing\meta_mms\generate_mms.py \
+        --speakers manifests\mms_selected_speakers.csv \
+        --transcripts transcripts_mms \
+        --out data\processed\meta-mms
 
 Test only 10 utterances per speaker:
 
-    python preprocessing\\generate_mms.py ^
-        --speakers manifests\\mms_selected_speakers.csv ^
-        --transcripts transcripts_mms ^
-        --out data\\processed\\meta-mms ^
+    python preprocessing\meta_mms\generate_mms.py \
+        --speakers manifests\mms_selected_speakers.csv \
+        --transcripts transcripts_mms \
+        --out data\processed\meta-mms \
         --limit 10
 """
 
@@ -61,7 +64,6 @@ import argparse
 import csv
 import sys
 from pathlib import Path
-
 
 # ---------------------------------------------------------------------------
 # DEPENDENCIES
@@ -109,6 +111,7 @@ set_seed(SEED)
 # LOAD SPEAKERS
 # ---------------------------------------------------------------------------
 
+
 def load_selected_speakers(
     csv_path: Path,
 ) -> list[str]:
@@ -145,8 +148,7 @@ def load_selected_speakers(
         if "speaker_id" not in reader.fieldnames:
 
             print(
-                "ERROR: speaker CSV must contain "
-                "'speaker_id' column.",
+                "ERROR: speaker CSV must contain 'speaker_id' column.",
                 file=sys.stderr,
             )
 
@@ -154,14 +156,10 @@ def load_selected_speakers(
 
         for row in reader:
 
-            speaker_id = row[
-                "speaker_id"
-            ].strip()
+            speaker_id = row["speaker_id"].strip()
 
             if speaker_id:
-                speakers.append(
-                    speaker_id
-                )
+                speakers.append(speaker_id)
 
     return speakers
 
@@ -169,6 +167,7 @@ def load_selected_speakers(
 # ---------------------------------------------------------------------------
 # LOAD TRANSCRIPT
 # ---------------------------------------------------------------------------
+
 
 def load_transcript_file(
     transcript_path: Path,
@@ -201,9 +200,7 @@ def load_transcript_file(
             start=1,
         ):
 
-            line = line.rstrip(
-                "\n\r"
-            )
+            line = line.rstrip("\n\r")
 
             if not line.strip():
                 continue
@@ -215,21 +212,19 @@ def load_transcript_file(
             if "\t" not in line:
 
                 print(
-                    f"WARNING: "
+                    "WARNING: "
                     f"{transcript_path.name}:"
                     f"{line_number}: "
-                    f"no TAB delimiter found; "
-                    f"skipping.",
+                    "no TAB delimiter found; "
+                    "skipping.",
                     file=sys.stderr,
                 )
 
                 continue
 
-            filename, transcript = (
-                line.split(
-                    "\t",
-                    1,
-                )
+            filename, transcript = line.split(
+                "\t",
+                1,
             )
 
             filename = filename.strip()
@@ -242,26 +237,24 @@ def load_transcript_file(
             if not filename:
 
                 print(
-                    f"WARNING: "
+                    "WARNING: "
                     f"{transcript_path.name}:"
                     f"{line_number}: "
-                    f"empty filename; "
-                    f"skipping.",
+                    "empty filename; "
+                    "skipping.",
                     file=sys.stderr,
                 )
 
                 continue
 
-            if not filename.lower().endswith(
-                ".wav"
-            ):
+            if not filename.lower().endswith(".wav"):
 
                 print(
-                    f"WARNING: "
+                    "WARNING: "
                     f"{transcript_path.name}:"
                     f"{line_number}: "
-                    f"filename is not a WAV "
-                    f"file; skipping.",
+                    "filename is not a WAV "
+                    "file; skipping.",
                     file=sys.stderr,
                 )
 
@@ -274,11 +267,11 @@ def load_transcript_file(
             if not transcript:
 
                 print(
-                    f"WARNING: "
+                    "WARNING: "
                     f"{transcript_path.name}:"
                     f"{line_number}: "
-                    f"empty transcript; "
-                    f"skipping.",
+                    "empty transcript; "
+                    "skipping.",
                     file=sys.stderr,
                 )
 
@@ -302,6 +295,7 @@ def load_transcript_file(
 # OUTPUT FILENAME
 # ---------------------------------------------------------------------------
 
+
 def make_output_filename(
     original_filename: str,
 ) -> str:
@@ -315,19 +309,15 @@ def make_output_filename(
         example.1.wav
     """
 
-    path = Path(
-        original_filename
-    )
+    path = Path(original_filename)
 
-    return (
-        f"{path.stem}"
-        f"{OUTPUT_SUFFIX}"
-    )
+    return f"{path.stem}{OUTPUT_SUFFIX}"
 
 
 # ---------------------------------------------------------------------------
 # TTS
 # ---------------------------------------------------------------------------
+
 
 def generate_audio(
     model,
@@ -347,9 +337,7 @@ def generate_audio(
 
     if not text.strip():
 
-        raise ValueError(
-            "Transcript is empty."
-        )
+        raise ValueError("Transcript is empty.")
 
     # ------------------------------------------------------------------
     # Tokenization
@@ -361,10 +349,7 @@ def generate_audio(
         normalize=True,
     )
 
-    inputs = {
-        key: value.to(device)
-        for key, value in inputs.items()
-    }
+    inputs = {key: value.to(device) for key, value in inputs.items()}
 
     # ------------------------------------------------------------------
     # VITS generation parameters
@@ -382,15 +367,9 @@ def generate_audio(
 
     with torch.no_grad():
 
-        output = model(
-            **inputs
-        ).waveform
+        output = model(**inputs).waveform
 
-    waveform = (
-        output
-        .squeeze()
-        .cpu()
-    )
+    waveform = output.squeeze().cpu()
 
     return waveform
 
@@ -399,40 +378,29 @@ def generate_audio(
 # MAIN
 # ---------------------------------------------------------------------------
 
+
 def main():
 
     parser = argparse.ArgumentParser(
-        description=(
-            "Generate Cebuano synthetic speech "
-            "using Meta MMS TTS."
-        )
+        description="Generate Cebuano synthetic speech using Meta MMS TTS."
     )
 
     parser.add_argument(
         "--speakers",
         required=True,
-        help=(
-            "CSV containing selected MMS "
-            "speakers."
-        ),
+        help="CSV containing selected MMS speakers.",
     )
 
     parser.add_argument(
         "--transcripts",
         required=True,
-        help=(
-            "Folder containing one already-"
-            "normalized TXT file per speaker."
-        ),
+        help="Folder containing one already-normalized TXT file per speaker.",
     )
 
     parser.add_argument(
         "--out",
         required=True,
-        help=(
-            "Output directory for MMS-generated "
-            "audio."
-        ),
+        help="Output directory for MMS-generated audio.",
     )
 
     parser.add_argument(
@@ -448,17 +416,11 @@ def main():
 
     args = parser.parse_args()
 
-    speakers_path = Path(
-        args.speakers
-    )
+    speakers_path = Path(args.speakers)
 
-    transcripts_root = Path(
-        args.transcripts
-    )
+    transcripts_root = Path(args.transcripts)
 
-    output_root = Path(
-        args.out
-    )
+    output_root = Path(args.out)
 
     # -----------------------------------------------------------------------
     # Validate inputs
@@ -467,8 +429,7 @@ def main():
     if not speakers_path.exists():
 
         print(
-            f"ERROR: speaker CSV not found: "
-            f"{speakers_path}",
+            f"ERROR: speaker CSV not found: {speakers_path}",
             file=sys.stderr,
         )
 
@@ -477,9 +438,7 @@ def main():
     if not transcripts_root.exists():
 
         print(
-            f"ERROR: transcript directory "
-            f"not found: "
-            f"{transcripts_root}",
+            f"ERROR: transcript directory not found: {transcripts_root}",
             file=sys.stderr,
         )
 
@@ -494,49 +453,27 @@ def main():
     # Device
     # -----------------------------------------------------------------------
 
-    device = (
-        "cuda"
-        if torch.cuda.is_available()
-        else "cpu"
-    )
+    device = "cuda" if torch.cuda.is_available() else "cpu"
 
     print("=" * 60)
     print("Meta MMS Cebuano TTS")
     print("=" * 60)
 
-    print(
-        f"Model       : {MODEL_NAME}"
-    )
+    print(f"Model       : {MODEL_NAME}")
 
-    print(
-        f"Device      : {device}"
-    )
+    print(f"Device      : {device}")
 
-    print(
-        f"Output rate : "
-        f"{OUTPUT_SAMPLE_RATE} Hz"
-    )
+    print(f"Output rate : {OUTPUT_SAMPLE_RATE} Hz")
 
-    print(
-        f"Seed        : {SEED}"
-    )
+    print(f"Seed        : {SEED}")
 
-    print(
-        f"Transcripts : "
-        f"{transcripts_root.resolve()}"
-    )
+    print(f"Transcripts : {transcripts_root.resolve()}")
 
-    print(
-        f"Output      : "
-        f"{output_root.resolve()}"
-    )
+    print(f"Output      : {output_root.resolve()}")
 
     if args.limit is not None:
 
-        print(
-            f"Test limit  : "
-            f"{args.limit} utterances/speaker"
-        )
+        print(f"Test limit  : {args.limit} utterances/speaker")
 
     print()
 
@@ -544,29 +481,17 @@ def main():
     # Load model + tokenizer ONCE
     # -----------------------------------------------------------------------
 
-    print(
-        f"Loading {MODEL_NAME}..."
-    )
+    print(f"Loading {MODEL_NAME}...")
 
-    tokenizer = (
-        VitsTokenizer.from_pretrained(
-            MODEL_NAME
-        )
-    )
+    tokenizer = VitsTokenizer.from_pretrained(MODEL_NAME)
 
-    model = (
-        VitsModel.from_pretrained(
-            MODEL_NAME
-        )
-    )
+    model = VitsModel.from_pretrained(MODEL_NAME)
 
     model.to(device)
 
     model.eval()
 
-    print(
-        "Model loaded."
-    )
+    print("Model loaded.")
 
     print()
 
@@ -574,14 +499,9 @@ def main():
     # Load speaker selection
     # -----------------------------------------------------------------------
 
-    speakers = load_selected_speakers(
-        speakers_path
-    )
+    speakers = load_selected_speakers(speakers_path)
 
-    print(
-        f"Selected speakers: "
-        f"{len(speakers)}"
-    )
+    print(f"Selected speakers: {len(speakers)}")
 
     print("-" * 60)
 
@@ -603,15 +523,9 @@ def main():
 
     for speaker_id in speakers:
 
-        transcript_path = (
-            transcripts_root
-            / f"{speaker_id}.txt"
-        )
+        transcript_path = transcripts_root / f"{speaker_id}.txt"
 
-        speaker_output_dir = (
-            output_root
-            / speaker_id
-        )
+        speaker_output_dir = output_root / speaker_id
 
         # --------------------------------------------------------------
         # Missing transcript
@@ -621,7 +535,7 @@ def main():
 
             print(
                 f"WARNING: [{speaker_id}] "
-                f"transcript not found: "
+                "transcript not found: "
                 f"{transcript_path}",
                 file=sys.stderr,
             )
@@ -634,20 +548,13 @@ def main():
         # Load transcript
         # --------------------------------------------------------------
 
-        entries = load_transcript_file(
-            transcript_path
-        )
+        entries = load_transcript_file(transcript_path)
 
         if args.limit is not None:
 
-            entries = entries[
-                :args.limit
-            ]
+            entries = entries[: args.limit]
 
-        print(
-            f"[{speaker_id}] "
-            f"{len(entries)} utterances"
-        )
+        print(f"[{speaker_id}] {len(entries)} utterances")
 
         # --------------------------------------------------------------
         # Create output directory
@@ -670,16 +577,9 @@ def main():
             start=1,
         ):
 
-            output_filename = (
-                make_output_filename(
-                    original_filename
-                )
-            )
+            output_filename = make_output_filename(original_filename)
 
-            output_path = (
-                speaker_output_dir
-                / output_filename
-            )
+            output_path = speaker_output_dir / output_filename
 
             # ----------------------------------------------------------
             # Resume support
@@ -718,39 +618,21 @@ def main():
 
                 if index <= 3:
 
-                    print(
-                        f"\n  Example {index}:"
-                    )
+                    print(f"\n  Example {index}:")
 
-                    print(
-                        f"    File       : "
-                        f"{original_filename}"
-                    )
+                    print(f"    File       : {original_filename}")
 
-                    print(
-                        f"    MMS input  : "
-                        f"{transcript}"
-                    )
+                    print(f"    MMS input  : {transcript}")
 
-                    print(
-                        f"    Output     : "
-                        f"{output_filename}"
-                    )
+                    print(f"    Output     : {output_filename}")
 
             except Exception as e:
 
                 total_failed += 1
 
-                print(
-                    f"\nFAILED "
-                    f"[{speaker_id}] "
-                    f"{original_filename}"
-                )
+                print(f"\nFAILED [{speaker_id}] {original_filename}")
 
-                print(
-                    f"  Transcript: "
-                    f"{transcript}"
-                )
+                print(f"  Transcript: {transcript}")
 
                 print(
                     f"  Error: {e}",
@@ -761,21 +643,18 @@ def main():
             # Progress
             # ----------------------------------------------------------
 
-            if (
-                index % 100 == 0
-                or index == len(entries)
-            ):
+            if index % 100 == 0 or index == len(entries):
 
                 print(
                     f"  {index}/"
                     f"{len(entries)} "
-                    f"processed "
+                    "processed "
                     f"({total_generated} "
-                    f"generated, "
+                    "generated, "
                     f"{total_skipped} "
-                    f"skipped, "
+                    "skipped, "
                     f"{total_failed} "
-                    f"failed)"
+                    "failed)"
                 )
 
     # -----------------------------------------------------------------------
@@ -790,43 +669,24 @@ def main():
 
     print("=" * 60)
 
-    print(
-        f"Speakers selected       : "
-        f"{len(speakers)}"
-    )
+    print(f"Speakers selected       : {len(speakers)}")
 
-    print(
-        f"Missing transcripts     : "
-        f"{total_missing_transcripts}"
-    )
+    print(f"Missing transcripts     : {total_missing_transcripts}")
 
-    print(
-        f"Files generated         : "
-        f"{total_generated}"
-    )
+    print(f"Files generated         : {total_generated}")
 
-    print(
-        f"Files already existed   : "
-        f"{total_skipped}"
-    )
+    print(f"Files already existed   : {total_skipped}")
 
-    print(
-        f"Files failed            : "
-        f"{total_failed}"
-    )
+    print(f"Files failed            : {total_failed}")
 
     print()
 
-    print(
-        f"MMS audio written to: "
-        f"{output_root.resolve()}"
-    )
+    print(f"MMS audio written to: {output_root.resolve()}")
 
     if total_failed > 0:
 
         print(
-            "\nWARNING: Some files failed. "
-            "Review the FAILED messages above."
+            "\nWARNING: Some files failed. Review the FAILED messages above."
         )
 
 

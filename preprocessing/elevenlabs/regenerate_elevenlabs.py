@@ -1,4 +1,3 @@
-
 """
 regenerate_elevenlabs.py
 
@@ -32,34 +31,22 @@ from pathlib import Path
 import requests
 from dotenv import load_dotenv
 
-
 # ============================================================
 # PATHS
 # ============================================================
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
-OUTPUT_ROOT = (
-    PROJECT_ROOT
-    / "data"
-    / "processed"
-    / "elevenlabs"
-)
+OUTPUT_ROOT = PROJECT_ROOT / "data" / "processed" / "elevenlabs"
 
-VOICE_ID_FILE = (
-    PROJECT_ROOT
-    / "manifests"
-    / "elevenlabs_voice_ids.txt"
-)
+VOICE_ID_FILE = PROJECT_ROOT / "manifests" / "elevenlabs_voice_ids.txt"
 
 
 # ============================================================
 # ELEVENLABS CONFIG
 # ============================================================
 
-API_URL_TEMPLATE = (
-    "https://api.elevenlabs.io/v1/text-to-speech/{voice_id}"
-)
+API_URL_TEMPLATE = "https://api.elevenlabs.io/v1/text-to-speech/{voice_id}"
 
 MODEL_ID = "eleven_v3"
 LANGUAGE_CODE = "ceb"
@@ -72,6 +59,7 @@ REQUEST_DELAY = 0.25
 # ERRORS
 # ============================================================
 
+
 class QuotaExceededError(Exception):
     pass
 
@@ -79,6 +67,7 @@ class QuotaExceededError(Exception):
 # ============================================================
 # ELEVENLABS HELPERS
 # ============================================================
+
 
 def is_quota_exceeded(response: requests.Response) -> bool:
     """
@@ -90,12 +79,8 @@ def is_quota_exceeded(response: requests.Response) -> bool:
 
     body = response.text.lower()
 
-    return (
-        "quota_exceeded" in body
-        or (
-            "insufficient" in body
-            and "credit" in body
-        )
+    return "quota_exceeded" in body or (
+        "insufficient" in body and "credit" in body
     )
 
 
@@ -111,10 +96,7 @@ def load_voice_ids() -> dict:
     """
 
     if not VOICE_ID_FILE.exists():
-        sys.exit(
-            f"ERROR: Voice ID file not found:\n"
-            f"  {VOICE_ID_FILE}"
-        )
+        sys.exit(f"ERROR: Voice ID file not found:\n  {VOICE_ID_FILE}")
 
     ids = {}
 
@@ -130,10 +112,7 @@ def load_voice_ids() -> dict:
             if " - " not in line:
                 continue
 
-            speaker_id, voice_id = line.split(
-                " - ",
-                1
-            )
+            speaker_id, voice_id = line.split(" - ", 1)
 
             speaker_id = speaker_id.strip()
             voice_id = voice_id.strip()
@@ -168,9 +147,7 @@ def generate_audio(
     try:
 
         response = requests.post(
-            API_URL_TEMPLATE.format(
-                voice_id=voice_id
-            ),
+            API_URL_TEMPLATE.format(voice_id=voice_id),
             headers=headers,
             json=payload,
             timeout=REQUEST_TIMEOUT,
@@ -182,14 +159,12 @@ def generate_audio(
         return None
 
     if is_quota_exceeded(response):
-        raise QuotaExceededError(
-            response.text
-        )
+        raise QuotaExceededError(response.text)
 
     if response.status_code != 200:
 
         print(
-            f"    ElevenLabs error "
+            "    ElevenLabs error "
             f"{response.status_code}: "
             f"{response.text[:300]}"
         )
@@ -202,6 +177,7 @@ def generate_audio(
 # ============================================================
 # TSV LOADER
 # ============================================================
+
 
 def load_targets(tsv_path: Path) -> list:
     """
@@ -254,23 +230,14 @@ def load_targets(tsv_path: Path) -> list:
             # Skip header
             # ------------------------------------------------
 
-            if (
-                parts
-                and parts[0].strip().lower()
-                == "speaker_id"
-            ):
+            if parts and parts[0].strip().lower() == "speaker_id":
                 continue
 
             if len(parts) < 4:
 
-                print(
-                    f"WARNING: malformed TSV line "
-                    f"{line_number}, skipping:"
-                )
+                print(f"WARNING: malformed TSV line {line_number}, skipping:")
 
-                print(
-                    repr(raw_line.rstrip("\n"))
-                )
+                print(repr(raw_line.rstrip("\n")))
 
                 continue
 
@@ -285,30 +252,25 @@ def load_targets(tsv_path: Path) -> list:
 
             if not speaker_id:
                 print(
-                    f"WARNING: line {line_number} "
-                    f"has no speaker ID, skipping."
+                    f"WARNING: line {line_number} has no speaker ID, skipping."
                 )
                 continue
 
             if not wav_filename:
                 print(
                     f"WARNING: line {line_number} "
-                    f"has no WAV filename, skipping."
+                    "has no WAV filename, skipping."
                 )
                 continue
 
             if not transcript:
                 print(
-                    f"WARNING: line {line_number} "
-                    f"has no transcript, skipping."
+                    f"WARNING: line {line_number} has no transcript, skipping."
                 )
                 continue
 
             if not saying:
-                print(
-                    f"WARNING: line {line_number} "
-                    f"has no saying, skipping."
-                )
+                print(f"WARNING: line {line_number} has no saying, skipping.")
                 continue
 
             targets.append(
@@ -327,23 +289,17 @@ def load_targets(tsv_path: Path) -> list:
 # MAIN
 # ============================================================
 
+
 def main():
 
     parser = argparse.ArgumentParser(
-        description=(
-            "Regenerate selected ElevenLabs "
-            "utterances from a TSV."
-        )
+        description="Regenerate selected ElevenLabs utterances from a TSV."
     )
 
     parser.add_argument(
         "tsv",
         type=Path,
-        help=(
-            "TSV containing "
-            "speaker_id, wav_filename, "
-            "transcript, saying"
-        ),
+        help="TSV containing speaker_id, wav_filename, transcript, saying",
     )
 
     args = parser.parse_args()
@@ -354,20 +310,13 @@ def main():
     # Environment
     # --------------------------------------------------------
 
-    load_dotenv(
-        PROJECT_ROOT / ".env"
-    )
+    load_dotenv(PROJECT_ROOT / ".env")
 
-    api_key = os.environ.get(
-        "ELEVENLABS_API_KEY"
-    )
+    api_key = os.environ.get("ELEVENLABS_API_KEY")
 
     if not api_key:
 
-        sys.exit(
-            "ERROR: ELEVENLABS_API_KEY "
-            "not found in .env"
-        )
+        sys.exit("ERROR: ELEVENLABS_API_KEY not found in .env")
 
     # --------------------------------------------------------
     # TSV existence
@@ -375,10 +324,7 @@ def main():
 
     if not tsv_path.exists():
 
-        sys.exit(
-            f"ERROR: TSV not found:\n"
-            f"  {tsv_path}"
-        )
+        sys.exit(f"ERROR: TSV not found:\n  {tsv_path}")
 
     # --------------------------------------------------------
     # Load voices
@@ -388,31 +334,21 @@ def main():
 
     voice_ids = load_voice_ids()
 
-    print(
-        f"Loaded {len(voice_ids)} speaker voice IDs."
-    )
+    print(f"Loaded {len(voice_ids)} speaker voice IDs.")
 
     # --------------------------------------------------------
     # Load targets
     # --------------------------------------------------------
 
-    print(
-        f"\nLoading regeneration list:\n"
-        f"  {tsv_path}"
-    )
+    print(f"\nLoading regeneration list:\n  {tsv_path}")
 
     targets = load_targets(tsv_path)
 
     if not targets:
 
-        sys.exit(
-            "ERROR: No valid rows found in TSV."
-        )
+        sys.exit("ERROR: No valid rows found in TSV.")
 
-    print(
-        f"Found {len(targets)} "
-        f"utterances to regenerate.\n"
-    )
+    print(f"Found {len(targets)} utterances to regenerate.\n")
 
     # --------------------------------------------------------
     # Counters
@@ -436,26 +372,15 @@ def main():
         transcript = target["transcript"]
         saying = target["saying"]
 
-        print(
-            "--------------------------------------------------"
-        )
+        print("--------------------------------------------------")
 
-        print(
-            f"[{i}/{len(targets)}] "
-            f"SPEAKER: {speaker_id}"
-        )
+        print(f"[{i}/{len(targets)}] SPEAKER: {speaker_id}")
 
-        print(
-            f"    WAV:        {wav_filename}"
-        )
+        print(f"    WAV:        {wav_filename}")
 
-        print(
-            f"    NUMBER:     {transcript}"
-        )
+        print(f"    NUMBER:     {transcript}")
 
-        print(
-            f"    SAYING:     {saying}"
-        )
+        print(f"    SAYING:     {saying}")
 
         # ----------------------------------------------------
         # Check voice
@@ -464,8 +389,7 @@ def main():
         if speaker_id not in voice_ids:
 
             print(
-                f"    SKIPPED: no ElevenLabs voice ID "
-                f"for speaker {speaker_id}"
+                f"    SKIPPED: no ElevenLabs voice ID for speaker {speaker_id}"
             )
 
             skipped_no_voice += 1
@@ -477,15 +401,9 @@ def main():
         # Output path
         # ----------------------------------------------------
 
-        wav_stem = Path(
-            wav_filename
-        ).stem
+        wav_stem = Path(wav_filename).stem
 
-        output_path = (
-            OUTPUT_ROOT
-            / speaker_id
-            / f"{wav_stem}.2.wav"
-        )
+        output_path = OUTPUT_ROOT / speaker_id / f"{wav_stem}.2.wav"
 
         # ----------------------------------------------------
         # Generate
@@ -501,10 +419,7 @@ def main():
 
             if audio is None:
 
-                print(
-                    "    FAILED: ElevenLabs "
-                    "returned no audio."
-                )
+                print("    FAILED: ElevenLabs returned no audio.")
 
                 failed += 1
                 continue
@@ -525,9 +440,7 @@ def main():
 
                 f.write(audio)
 
-            print(
-                f"    SAVED: {output_path.name}"
-            )
+            print(f"    SAVED: {output_path.name}")
 
             generated += 1
 
@@ -535,24 +448,15 @@ def main():
             # Avoid hammering API
             # ------------------------------------------------
 
-            time.sleep(
-                REQUEST_DELAY
-            )
+            time.sleep(REQUEST_DELAY)
 
         except QuotaExceededError:
 
-            print(
-                "\n"
-                "=================================================="
-            )
+            print("\n==================================================")
 
-            print(
-                "!!! STOPPED: ElevenLabs credits ran out !!!"
-            )
+            print("!!! STOPPED: ElevenLabs credits ran out !!!")
 
-            print(
-                "=================================================="
-            )
+            print("==================================================")
 
             break
 
@@ -560,32 +464,19 @@ def main():
     # Summary
     # --------------------------------------------------------
 
-    print(
-        "\n"
-        "=================================================="
-    )
+    print("\n==================================================")
 
     print("DONE")
 
-    print(
-        f"Generated:         {generated}"
-    )
+    print(f"Generated:         {generated}")
 
-    print(
-        f"No voice ID:       {skipped_no_voice}"
-    )
+    print(f"No voice ID:       {skipped_no_voice}")
 
-    print(
-        f"Failed:            {failed}"
-    )
+    print(f"Failed:            {failed}")
 
-    print(
-        f"Total TSV rows:    {len(targets)}"
-    )
+    print(f"Total TSV rows:    {len(targets)}")
 
-    print(
-        "=================================================="
-    )
+    print("==================================================")
 
 
 if __name__ == "__main__":

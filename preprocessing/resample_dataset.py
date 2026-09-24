@@ -1,4 +1,4 @@
-"""
+r"""
 resample_dataset.py
 
 Resamples/converts audio to 16kHz mono while excluding transcript sources
@@ -10,7 +10,9 @@ Currently excludes:
 Raw originals are never modified.
 
 Usage:
-    python preprocessing\\resample_dataset.py --root "C:\\path\\to\\raw\\bonafide" --out "data\\processed\\bonafide"
+    python preprocessing\resample_dataset.py \
+        --root "C:\path\to\raw\bonafide" \
+        --out "data\processed\bonafide"
 """
 
 import argparse
@@ -101,9 +103,7 @@ def parse_transcript_sources(log_path: Path):
 
 def find_log_file(speaker_dir: Path):
 
-    log_files = list(
-        speaker_dir.glob("*.log")
-    )
+    log_files = list(speaker_dir.glob("*.log"))
 
     if not log_files:
         return None
@@ -121,8 +121,7 @@ def find_log_file(speaker_dir: Path):
 def should_exclude_source(source_file: str) -> bool:
 
     return any(
-        source_file.startswith(prefix)
-        for prefix in EXCLUDE_SOURCE_PREFIXES
+        source_file.startswith(prefix) for prefix in EXCLUDE_SOURCE_PREFIXES
     )
 
 
@@ -139,11 +138,7 @@ def build_exclusion_map(root: Path):
 
     excluded = {}
 
-    speaker_dirs = sorted(
-        d
-        for d in root.iterdir()
-        if d.is_dir()
-    )
+    speaker_dirs = sorted(d for d in root.iterdir() if d.is_dir())
 
     for speaker_dir in speaker_dirs:
 
@@ -151,15 +146,12 @@ def build_exclusion_map(root: Path):
 
         if not log_file:
             print(
-                f"WARNING: [{speaker_dir.name}] "
-                f"no .log file found",
+                f"WARNING: [{speaker_dir.name}] no .log file found",
                 file=sys.stderr,
             )
             continue
 
-        sources = parse_transcript_sources(
-            log_file
-        )
+        sources = parse_transcript_sources(log_file)
 
         for filename, source_file in sources.items():
 
@@ -178,8 +170,7 @@ def find_audio_files(root: Path):
     return [
         f
         for f in root.rglob("*")
-        if f.is_file()
-        and f.suffix.lower() in AUDIO_EXTENSIONS
+        if f.is_file() and f.suffix.lower() in AUDIO_EXTENSIONS
     ]
 
 
@@ -223,8 +214,7 @@ def main():
 
     parser = argparse.ArgumentParser(
         description=(
-            "Resample dataset to 16kHz mono "
-            "while excluding TGL sources"
+            "Resample dataset to 16kHz mono while excluding TGL sources"
         )
     )
 
@@ -260,9 +250,7 @@ def main():
 
     excluded = build_exclusion_map(root)
 
-    print(
-        f"Found {len(excluded)} excluded audio files."
-    )
+    print(f"Found {len(excluded)} excluded audio files.")
 
     print("\nALL EXCLUDED FILES:")
 
@@ -271,8 +259,7 @@ def main():
         speaker_id = f.parent.name
 
         print(
-            f"EXCLUDED [{speaker_id}] "
-            f"{f.name} | source={source_file}",
+            f"EXCLUDED [{speaker_id}] {f.name} | source={source_file}",
         )
 
     # ---------------------------------------------------------------
@@ -288,14 +275,9 @@ def main():
         )
         sys.exit(1)
 
-    print(
-        f"Found {len(audio_files)} audio files under {root}"
-    )
+    print(f"Found {len(audio_files)} audio files under {root}")
 
-    print(
-        f"Resampling to {TARGET_SR}Hz mono -> "
-        f"{out_root}"
-    )
+    print(f"Resampling to {TARGET_SR}Hz mono -> {out_root}")
 
     print("-" * 60)
 
@@ -308,9 +290,7 @@ def main():
         start=1,
     ):
 
-        src_resolved = str(
-            src.resolve()
-        )
+        src_resolved = str(src.resolve())
 
         # -----------------------------------------------------------
         # Exclude TGL
@@ -341,10 +321,7 @@ def main():
         else:
             fail_count += 1
 
-        if (
-            i % 500 == 0
-            or i == len(audio_files)
-        ):
+        if i % 500 == 0 or i == len(audio_files):
             print(
                 f"  Processed {i}/{len(audio_files)} "
                 f"({success_count} ok, "
@@ -355,22 +332,19 @@ def main():
     print("-" * 60)
 
     print(
-        f"Done. "
+        "Done. "
         f"{success_count} succeeded, "
         f"{fail_count} failed, "
         f"{excluded_count} excluded."
     )
 
-    print(
-        f"Resampled audio written to: "
-        f"{out_root.resolve()}"
-    )
+    print(f"Resampled audio written to: {out_root.resolve()}")
 
     if fail_count > 0:
         print(
             f"\n{fail_count} file(s) failed to resample -- "
-            f"check the FAILED lines above and decide "
-            f"whether to fix/exclude them."
+            "check the FAILED lines above and decide "
+            "whether to fix/exclude them."
         )
 
 

@@ -1,4 +1,4 @@
-"""
+r"""
 count_characters.py
 
 Scans an entire dataset folder recursively for .log files and counts
@@ -26,7 +26,7 @@ Metadata lines such as:
 are ignored.
 
 Usage:
-    python test\count_characters.py --root "C:\\path\\to\\CEB"
+    python test\count_characters.py --root "C:\path\to\CEB"
 """
 
 import argparse
@@ -34,7 +34,6 @@ import re
 import sys
 from pathlib import Path
 from collections import Counter
-
 
 AUDIO_EXTENSIONS = {
     ".wav",
