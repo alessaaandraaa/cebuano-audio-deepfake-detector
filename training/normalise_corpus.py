@@ -45,32 +45,64 @@ Every file, both classes, no exceptions -- that is the entire point:
     1. decode to mono float
     2. resample to 16 kHz with one resampler
     3. trim leading/trailing silence at a fixed relative threshold
-    4. MP3 encode/decode round trip at fixed settings
-    5. trim again (the encoder adds its own padding)
-    6. loudness-normalise to a fixed target
-    7. add a common dither floor
-    8. write 16 kHz mono PCM_16 WAV
+    4. peak-normalise so max|x| = 1.0
+    5. write 16 kHz mono PCM_16 WAV
 
-Step 4 is the codec equalisation. Decoding an MP3 to WAV does not undo
-MP3; the quantisation artefacts survive. The only way to stop "has been
-through MP3" from being a label is to put everything through it.
+WHY THESE OPERATIONS AND NOT OTHERS
 
-HONEST CAVEAT ON STEP 4
+This follows the shortcut-artefact pipeline introduced for ASVspoof 5
+(Wang et al., arXiv:2502.08857), which is the closest thing this field
+has to a standard for the problem. That pipeline reduces the mismatch
+between bonafide and spoof in three quantities -- peak waveform
+amplitude, leading/trailing non-speech duration, and utterance duration
+-- and reports per-feature EER before and after. Peak amplitude alone
+went from 99.71% to 53.80% EER for one attack; leading non-speech from
+60.61% to 47.98%.
 
-ElevenLabs clips end up with two MP3 generations while everything else
-has one. That residual asymmetry is much weaker than MP3-vs-PCM -- the
-44.1 kHz -> 16 kHz resample in step 2 already smears the original
-MDCT frame grid before re-encoding -- but it is not zero. Re-run
-probe_shortcuts.py afterwards and let it adjudicate rather than
-assuming. If spectral features still separate the classes, the next
-step is regenerating ElevenLabs as PCM, which this script cannot do.
+Concretely they "linearly scale the waveform by a factor r so that the
+peak amplitude max r|x| is equal to 1.0", trim non-speech at
+probabilistically chosen boundaries, and take a random 4-10 s chunk.
+Notably they do NOT scale utterance energy, having "observed similar
+energy distributions at the pipeline output".
 
-ORDERING MATTERS
+Utterance duration is handled downstream here rather than in this
+script: the training config crops to a fixed 64600-sample (~4.04 s)
+window, which serves the same purpose.
 
-Loudness normalisation is last because the codec changes level. Silence
-is trimmed both before and after the codec because the encoder adds
-padding of its own. Doing these in a different order leaves a residue
-of exactly the cue you were trying to remove.
+OPTIONS THAT ARE OFF BY DEFAULT, AND WHY
+
+    --loudness lufs|rms   Gated BS.1770-4 or plain RMS instead of peak.
+                          Both are defensible in the abstract and
+                          NEITHER is what anti-spoofing does. Using one
+                          means defending a departure from the
+                          literature on your own measurements. Peak is
+                          the citable choice.
+
+    --dither-dbfs N       Adds a common noise floor. Standard DSP
+                          before 16-bit quantisation, but using it to
+                          equalise a class difference is not something
+                          this literature does. It also backfired once
+                          here: at -75 dBFS it was quieter than half a
+                          least-significant bit, so quiet passages
+                          still rounded to bit-exact zero and
+                          frac_exact_zero went from 0.5000 (clean) to
+                          0.3115 (leaking) -- the dither CREATED the
+                          cue it was meant to remove.
+
+    --equalise            One MP3 encode/decode pass over everything,
+                          to give every file the same codec history.
+                          Measured on a paired test: the residual MP3
+                          difference after resampling to 16 kHz was
+                          already weak (EER 0.4267) and equalising did
+                          not measurably improve it (0.4000, inside the
+                          noise at that sample size). ASVspoof 2021 DF
+                          applies codecs to create variability, not to
+                          remove it.
+
+If you turn any of these on, the probe should show a measured
+improvement that justifies it. Otherwise leave them off -- an
+unjustifiable preprocessing step is worse than a small residual leak,
+because you have to defend it and you cannot cite it.
 
 WHAT ONE GAIN CANNOT FIX
 
@@ -106,14 +138,15 @@ AFTER RUNNING
 
 Usage:
 
-    # preflight: is libmp3lame present?
+    # preflight: is ffmpeg usable? (only needed with --equalise)
     python training\normalise_corpus.py --check-ffmpeg
 
-    # dry run (DEFAULT): plan + before/after on a sample, writes nothing
+    # dry run (DEFAULT): sample processed in memory, nothing written
     python training\normalise_corpus.py --bonafide-root data\processed\bonafide --spoof-root meta-mms=data\processed\meta-mms --spoof-root elevenlabs=data\processed\elevenlabs --out-root data\normalised
 
-    # do it
-    python training\normalise_corpus.py --bonafide-root data\processed\bonafide --spoof-root meta-mms=data\processed\meta-mms --spoof-root elevenlabs=data\processed\elevenlabs --out-root data\normalised --apply --workers 4
+    # do it -- defaults are the ASVspoof-5-aligned chain
+    python training\normalise_corpus.py --bonafide-root data\processed\bonafide --spoof-root meta-mms=data\processed\meta-mms --spoof-root elevenlabs=data\processed\elevenlabs --out-root data\normalised --apply --workers 6
+
 """
 
 import argparse
@@ -409,6 +442,22 @@ def normalise_level(x, target_dbfs, mode):
     not others would put a level cue straight back in.
     """
     used = "rms"
+
+    # ASVspoof 5's shortcut-artefact pipeline scales each waveform so
+    # its peak amplitude equals 1.0. Matching that exactly is worth more
+    # than any theoretical advantage of a different level metric,
+    # because it is the operation this field actually performs and can
+    # therefore be cited rather than argued for.
+    if mode == "peak":
+        peak_in = float(np.abs(x).max()) if x.size else 0.0
+
+        if peak_in <= 0:
+            return x.astype(np.float32), 0.0, False, "peak"
+
+        gain_db = 20.0 * np.log10(target_dbfs / peak_in)
+        y = (x * (target_dbfs / peak_in)).astype(np.float32)
+
+        return y, float(gain_db), False, "peak"
 
     if mode in ("auto", "lufs"):
         lufs = measure_lufs(x)
@@ -887,11 +936,25 @@ def main():
     )
     parser.add_argument(
         "--loudness",
-        choices=["auto", "lufs", "rms"],
-        default="auto",
+        choices=["peak", "auto", "lufs", "rms"],
+        default="peak",
         help=(
-            "auto uses ITU-R BS.1770 when pyloudnorm is installed and "
-            "falls back to RMS otherwise (default: auto)"
+            "level normalisation. DEFAULT peak, which scales each "
+            "waveform so its peak amplitude equals --peak-target, "
+            "matching the ASVspoof 5 shortcut-artefact pipeline. "
+            "lufs (gated ITU-R BS.1770-4) and rms are available but "
+            "are NOT what this field does -- prefer peak unless you "
+            "have a measured reason and are willing to defend it. "
+            "auto = lufs when pyloudnorm is present, else rms."
+        ),
+    )
+    parser.add_argument(
+        "--peak-target",
+        type=float,
+        default=1.0,
+        help=(
+            "peak amplitude for --loudness peak (default: 1.0, the "
+            "ASVspoof 5 value)"
         ),
     )
     parser.add_argument(
@@ -908,18 +971,33 @@ def main():
     parser.add_argument(
         "--dither-dbfs",
         type=float,
-        default=DEFAULT_DITHER_DBFS,
+        default=None,
         help=(
-            "common noise floor added to every file (default: "
-            f"{DEFAULT_DITHER_DBFS:g}). "
-            "Closes the frac_exact_zero and noise_floor_db cues that "
-            "survive loudness normalisation. Use --no-dither to skip."
+            "add a common noise floor at this level, e.g. -55. OFF by "
+            "default. Not something this literature does, and at too "
+            "low a level it creates the very cue it removes: at -75 "
+            "dBFS (under half an LSB) quiet passages still rounded to "
+            "bit-exact zero and frac_exact_zero went 0.5000 -> 0.3115. "
+            "Only enable with a probe result that justifies it."
         ),
     )
     parser.add_argument(
         "--no-dither",
         action="store_true",
         help="skip the dither step",
+    )
+    parser.add_argument(
+        "--equalise",
+        action="store_true",
+        help=(
+            "run an MP3 encode/decode pass over every file. OFF by "
+            "default: measured on a paired test, the residual MP3 "
+            "difference after resampling to 16 kHz was already weak "
+            "(EER 0.4267) and equalising did not measurably improve it "
+            "(0.4000, within noise). It is also not something this "
+            "field does -- ASVspoof 2021 DF applies codecs to create "
+            "variability, not to equalise it."
+        ),
     )
     parser.add_argument(
         "--no-equalise",
@@ -945,6 +1023,13 @@ def main():
 
     if args.no_dither:
         args.dither_dbfs = None
+
+    # --equalise opts IN; --no-equalise is kept so old commands still
+    # parse, but the default is now off.
+    args.no_equalise = not args.equalise or args.no_equalise
+
+    if args.loudness == "peak":
+        args.target_dbfs = args.peak_target
 
     roots = []
 
@@ -994,9 +1079,14 @@ def main():
         if args.dither_dbfs is None
         else f" -> dither {args.dither_dbfs:g} dBFS"
     )
+    level_step = (
+        f"peak -> {args.peak_target:g}"
+        if args.loudness == "peak"
+        else f"{args.loudness} {args.target_dbfs:g} dBFS"
+    )
     print(
         f"  chain        : 16 kHz mono -> trim -> {codec_step}"
-        f"{args.loudness} {args.target_dbfs:g} dBFS{dither_step}"
+        f"{level_step}{dither_step}"
     )
     print(f"  output       : {args.out_root}")
     print(f"  workers      : {args.workers}")

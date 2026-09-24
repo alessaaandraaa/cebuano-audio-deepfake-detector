@@ -22,7 +22,7 @@ instead of "is this speech synthetic."
 
 **What you did.** Every clip now goes through one identical chain:
 decode → 16 kHz mono → trim silence → MP3 encode/decode → trim again →
-loudness-normalise to −26 dBFS → dither → write 16-bit PCM WAV.
+loudness-normalise to −26 LUFS → dither → write 16-bit PCM WAV.
 
 Two points worth explaining rather than just listing:
 
@@ -37,8 +37,23 @@ Two points worth explaining rather than just listing:
 > *Draft:* All audio was decoded to 16 kHz mono, silence-trimmed at a
 > −40 dB relative threshold, passed through an identical MP3
 > encode/decode cycle to equalise codec history across sources,
-> loudness-normalised to −26 dBFS, dithered, and written as 16-bit PCM.
+> loudness-normalised to −26 LUFS (ITU-R BS.1770-4), dithered, and
+> written as 16-bit PCM.
 > The chain was applied identically to bonafide and spoof recordings.
+
+**Get the unit right.** It is **LUFS**, not dBFS. The pipeline uses
+gated loudness per ITU-R BS.1770-4 (via pyloudnorm), which excludes
+quiet frames from the measurement, not a raw amplitude average.
+Verified by measuring the corpus: whole-file RMS still varies
+(bonafide sd 1.26 dB, range −29.8 to −26.1), which would be impossible
+under RMS normalisation and is exactly what gating produces.
+
+That gating is also why `rms_db` still separates the classes at EER
+0.1963 after normalisation. BS.1770 equalises *speech* loudness;
+bonafide carries more pause content, so its whole-file RMS sits about
+1.5 dB below the two TTS sources. Worth one sentence, because a
+reviewer looking at the feature table will ask why loudness
+normalisation left a loudness cue.
 
 ### B. Text handling for the two TTS systems (new)
 
