@@ -1,0 +1,227 @@
+# ---------------------------------------------------------------------------
+# train_main.yaml -- primary experiment
+#
+# XLS-R 300M (frontend) + AASIST (backend), jointly fine-tuned, with
+# Opus and AMR-NB codec augmentation applied on the fly.
+#
+# Implements Section 4.3.2 of the thesis:
+#   - 16 kHz mono, fixed ~4 s via waveform repetition / random crop
+#     NOTE: thesis says 10 s 'per the DeepFense default'. The actual
+#     default is max_len=64000 (pad_combined in transforms.py), and
+#     64600 (~4.04 s) is the ASVspoof convention. Update the thesis.
+#   - XLS-R pretrained weights as initialisation, NOT frozen
+#   - OC-Softmax as the primary loss
+#   - speaker-disjoint 70/15/15 split (built by build_manifests.py)
+#   - codec compression as on-the-fly augmentation, no extra files on disk
+#
+# Run:
+#   deepfense train --config training\configs\train_main.yaml
+#
+# ---------------------------------------------------------------------------
+# CUSTOM TRANSFORMS -- read this before running
+#
+# opus_codec and amrnb_codec live in training/codec_opus_amr.py and are
+# registered with @register_transform from deepfense.utils.registry.
+# The decorator only fires when that module is IMPORTED, and the
+# deepfense CLI does not import it.
+#
+# So launch this config through the runner, not the bare CLI:
+#
+#   python training\run_training.py --config training\configs\train_main.yaml
+#
+# Running `deepfense train` directly will fail with
+#   KeyError: 'opus_codec' not found in Transform registry
+# which is the correct, loud failure -- not a silent skip.
+# ---------------------------------------------------------------------------
+#
+# EXPERIMENT MATRIX -- copy this file and change ONLY the augment_transform
+# block to produce the other three runs your evaluation plan (Section 4.10)
+# needs:
+#
+#   train_noaug.yaml   -> delete the whole augment_transform block
+#                         (ablation: quantifies what codec aug buys you)
+#   train_opus.yaml    -> keep only the opus_codec entry
+#                         (cross-channel: test on AMR)
+#   train_amr.yaml     -> keep only the amrnb_codec entry
+#                         (cross-channel: test on Opus)
+#
+# Keep seed, split, and every other value identical across the four runs,
+# otherwise the ablation is not measuring what you think it is.
+# ---------------------------------------------------------------------------
+
+exp_name: "ceb_xlsr_aasist_opus_amr"
+output_dir: "./outputs/"
+seed: 42
+
+data:
+  sampling_rate: 16000
+  label_map: { "bonafide": 1, "spoof": 0 }
+
+  train:
+    dataset_type: "StandardDataset"
+    dataset_names: ["ceb_pld"]
+    parquet_files: ["manifests/splits_norm/train.parquet"]
+    batch_size: 4            # 8 unfrozen OOMs on the 8 GB card; 4 is proven
+    shuffle: True
+    num_workers: 4             # laptop cores; codec aug is CPU-bound
+    target_sr: 16000
+    mono: True
+    max_len: 64600
+    base_transform:
+      - type: "pad"
+        max_len: 64600        # ~4.04 s @ 16 kHz (ASVspoof convention)
+        pad_type: "repeat"     # short clips extended by repetition
+        random_pad: True       # random ~4 s crop of longer clips
+
+    # ---------------------------------------------------------------
+    # CODEC AUGMENTATION -- edit this block for the matrix above.
+    #
+    # The built-in "codec" transform exposes only noise_ratio and gives
+    # no control over codec choice or bitrate, so these two implement
+    # the bitrate policy the methodology specifies.
+    # ---------------------------------------------------------------
+    augment_transform:
+      - type: "opus_codec"
+        noise_ratio: 0.5       # fraction of samples to degrade
+        bitrate_min: 6000      # 6 kbps   (thesis: 6-32 kbps)
+        bitrate_max: 32000     # 32 kbps
+      - type: "amrnb_codec"
+        noise_ratio: 0.5
+        # cycles AMR-NB's eight standard source bitrates
+        bitrates: [4750, 5150, 5900, 6700, 7400, 7950, 10200, 12200]
+
+  val:
+    dataset_type: "StandardDataset"
+    dataset_names: ["ceb_pld"]
+    parquet_files: ["manifests/splits_norm/val.parquet"]
+    batch_size: 16
+    shuffle: False
+    num_workers: 2
+    target_sr: 16000
+    mono: True
+    max_len: 64600
+    base_transform:
+      - type: "pad"
+        max_len: 64600
+        pad_type: "repeat"
+        random_pad: False
+    # No augmentation on validation -- it selects the checkpoint, so it
+    # must stay a fixed target across every run in the matrix.
+
+  # ---------------------------------------------------------------------
+  # TEST -- read by `deepfense test`, ignored during training.
+  #
+  # Without this block `deepfense test` errors with "Could not configure
+  # test dataset" and you cannot produce per-sample scores at all.
+  #
+  # num_workers 0 on purpose: cli/commands/test.py imports
+  # build_dataloader at module import time, and deepfense_patches only
+  # rebinds it on cli.commands.train, so the unpicklable collate lambda
+  # comes back here. Testing is a single pass, so workers buy nothing.
+  #
+  # No augment_transform = the CLEAN condition. For the degraded
+  # conditions, copy this file and add an augment_transform block with
+  # opus_codec or amrnb_codec, and launch through run_training.py's
+  # sibling path so the custom transforms are registered -- the bare
+  # `deepfense test` CLI does not import codec_opus_amr.
+  #
+  # For per-source EER, point parquet_files at two files and name them:
+  #   parquet_files:
+  #     - "manifests/loso/holdout_elevenlabs/test_matched.parquet"   # mms
+  #     - "manifests/loso/holdout_meta-mms/test_matched.parquet"     # el
+  #   dataset_names: ["meta-mms", "elevenlabs"]
+  # test.py reports metrics per dataset_name automatically.
+  # ---------------------------------------------------------------------
+  test:
+    dataset_type: "StandardDataset"
+    dataset_names: ["ceb_pld"]
+    parquet_files: ["manifests/splits_norm/test.parquet"]
+    batch_size: 16
+    shuffle: False
+    num_workers: 0
+    target_sr: 16000
+    mono: True
+    max_len: 64600
+    base_transform:
+      - type: "pad"
+        max_len: 64600
+        pad_type: "repeat"
+        random_pad: False
+
+model:
+  type: "StandardDetector"
+  frontend:
+    type: "wav2vec2"
+    args:
+      source: "huggingface"
+      ckpt_path: "facebook/wav2vec2-xls-r-300m"
+      freeze: False              # jointly fine-tuned with the backend
+  backend:
+    type: "AASIST"
+    args:
+      input_dim: 1024
+  loss:
+    # OCAngleLayer requires all four of these -- none have defaults
+    # (oc_softmax.py:20-23). Values are the canonical ones from the
+    # OC-Softmax paper (Zhang, Jiang & Duan, arXiv:2010.13995) that
+    # the module's own docstring cites: m0=0.9, m1=0.2, alpha=20.
+    - type: "OCSoftmax"
+      weight: 1.0
+      embedding_dim: 160     # AASIST output: 5 x gat_dims[1] (32) = 160
+      w_posi: 0.9            # bonafide margin  (paper m0)
+      w_nega: 0.2            # spoof margin     (paper m1)
+      alpha: 20.0            # scale
+
+training:
+  epochs: 30
+  device: "cuda"
+
+  # batch_size 4 x 4 = effective batch 16, without the VRAM cost of 16.
+  gradient_accumulation_steps: 4
+
+  # The single biggest time lever. Anti-spoofing models on one language
+  # usually plateau well before 30 epochs; this stops as soon as val EER
+  # stops improving. MUST be identical across all four runs.
+  early_stopping_patience: 7
+
+  # Mid-epoch visibility. Without this, an epoch is a black box and a
+  # loss spike inside one is invisible -- you diagnose from two numbers
+  # a day. 500 steps is about every 3.5 minutes at 2.3 it/s.
+  batch_log_interval: 500
+
+  optimizer:
+    type: "adam"
+    lr: 0.000001               # low LR: the frontend is unfrozen
+
+    # Clip the global gradient norm before every step. NOT a stock
+    # deepfense key -- read by the patched build_optimizer in
+    # deepfense_patches.py. The stock optimizer factories ignore keys
+    # they do not know, so this is inert without the patch.
+    #
+    # deepfense has no clipping at all: loss.backward() goes straight
+    # into optimizer.step(). One outlier batch can move a 300M model a
+    # long way, and on a multi-day run you find out a day later.
+    #
+    # It also doubles as a diagnostic. If [grad-clip] lines are
+    # frequent, the LR is too high for this data. If they never appear,
+    # a divergence was NOT a gradient spike.
+    max_grad_norm: 5.0
+  scheduler:
+    # The registered NAME is "cosine", not "cosine_annealing" -- the
+    # Scheduler registry knows only step_lr / cosine / exponential
+    # (schedulers/utils.py:5-24). It does build torch's
+    # CosineAnnealingLR, and T_max / eta_min are the only keys it
+    # reads, so nothing about the schedule changes. This never
+    # surfaced in the smoke runs because those configs have no
+    # scheduler block at all.
+    type: "cosine"
+    T_max: 30
+  monitor_metric: "EER"
+  monitor_mode: "min"
+  metrics:
+    EER: {}
+    ACC: {}
+    # F1 is NOT in the deepfense metric registry -- requesting it
+    # only prints "[Warning] Metric 'F1' not found. Skipping." and
+    # you silently get no F1. Compute it from the saved scores at
+    # the EER threshold instead.

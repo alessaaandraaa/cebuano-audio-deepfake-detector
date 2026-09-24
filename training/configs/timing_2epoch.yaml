@@ -1,0 +1,217 @@
+# ---------------------------------------------------------------------------
+# timing_2epoch.yaml -- FULL-SCALE TIMING RUN, not a real experiment
+# ---------------------------------------------------------------------------
+#
+# This is train_main.yaml with the epoch count cut to 2 and early
+# stopping removed. Everything that costs time -- model, batch size,
+# max_len, workers, both codec augmentations, the full manifests -- is
+# unchanged, so the per-epoch number this produces transfers directly
+# to the real runs.
+#
+# WHY: every timing estimate so far came from the smoke set (320 clips,
+# no augmentation). Codec augmentation is CPU-bound ffmpeg work at
+# ~368 ms/clip and is the last unmeasured cost in the pipeline. This
+# run measures it at full scale so you can commit to the four-run
+# matrix with a real number instead of an extrapolation.
+#
+# WHAT TO RECORD:
+#   - s/it once the rate stabilises (first ~20 steps are warm-up)
+#   - wall-clock for epoch 1 vs epoch 2 (should be near-identical;
+#     if epoch 2 is much slower, something is leaking)
+#   - validation wall-clock, reported separately in the epoch line
+#   - peak VRAM from `nvidia-smi -l 2` in a second terminal
+#   - whether GPU utilisation sits high or sawtooths (sawtooth = the
+#     dataloader is starving it and num_workers needs raising)
+#
+# HOW TO READ IT:
+#   ~2.5 h/epoch     Augmentation is keeping up. 4 runs is ~10 days.
+#   ~4-6 h/epoch     ffmpeg is the bottleneck, not the GPU. Raise
+#                    num_workers, or drop noise_ratio to 0.3.
+#   >8 h/epoch       The matrix is not affordable on this laptop. Cut
+#                    to two runs (main + noaug) and say so in 4.10.
+#
+# YOU DO NOT HAVE TO LET IT FINISH. The steady-state s/it is visible
+# within a few minutes; Ctrl+C once it has stabilised and multiply out
+# by hand. Letting epoch 1 complete buys you the validation cost and
+# confirmation that nothing dies partway; that is the only reason to
+# wait.
+#
+# BEFORE RUNNING:
+#
+#   $env:PYTHONUTF8=1
+#   python training\codec_opus_amr.py --check-ffmpeg
+#   python training\deepfense_patches.py --verify
+#
+# --check-ffmpeg WILL FAIL on amrnb until the encoder is fixed --
+# require_encoder() raises at construction rather than silently
+# no-opping, so this config cannot start without it. See the note at
+# the augment_transform block below.
+#
+# RUN (the runner, not the bare CLI -- custom transforms + pickle patch):
+#
+#   python training\run_training.py --config training\configs\timing_2epoch.yaml
+#
+# ---------------------------------------------------------------------------
+
+exp_name: "ceb_5epoch_test"
+output_dir: "./outputs/"
+seed: 42
+
+data:
+  sampling_rate: 16000
+  label_map: { "bonafide": 1, "spoof": 0 }
+
+  train:
+    dataset_type: "StandardDataset"
+    dataset_names: ["ceb_pld"]
+    parquet_files: ["manifests/splits_norm/train.parquet"]
+
+    # 4, not 8. Batch 8 unfrozen threw torch.OutOfMemoryError on the
+    # 8 GB 5060; batch 4 was measured at 2.28 it/s. Keep this identical
+    # in the real runs or the timing does not transfer.
+    batch_size: 4
+    shuffle: True
+
+    # Codec augmentation is CPU-bound, so this is the knob that decides
+    # whether the GPU stays fed. Requires the pickle patch (applied by
+    # run_training.py) -- without it, Windows spawn workers die.
+    num_workers: 4
+
+    target_sr: 16000
+    mono: True
+    max_len: 64600
+    base_transform:
+      - type: "pad"
+        max_len: 64600 # ~4.04 s @ 16 kHz (ASVspoof convention)
+        pad_type: "repeat" # short clips extended by repetition
+        random_pad: True # random ~4 s crop of longer clips
+
+    # ---------------------------------------------------------------
+    # CODEC AUGMENTATION -- the thing this run exists to measure.
+    #
+    # The built-in "codec" transform exposes only noise_ratio and gives
+    # no control over codec choice or bitrate, so these two implement
+    # the bitrate policy the methodology specifies.
+    #
+    # BLOCKER: amrnb_codec needs an ffmpeg built with
+    # libopencore_amrnb COMPILED IN. Installing the library alone does
+    # nothing. Either:
+    #   winget install Gyan.FFmpeg.Full
+    #   conda install -c conda-forge ffmpeg
+    # and confirm with:
+    #   ffmpeg -encoders | findstr amr
+    #
+    # If you want the timing number TODAY and the encoder is still
+    # missing, comment out the amrnb_codec entry below and note that
+    # the measured rate is Opus-only -- AMR costs roughly the same per
+    # clip, so doubling that portion is a fair estimate.
+    # ---------------------------------------------------------------
+    augment_transform:
+      - type: "opus_codec"
+        noise_ratio: 0.5 # fraction of samples to degrade
+        bitrate_min: 6000 # 6 kbps   (thesis: 6-32 kbps)
+        bitrate_max: 32000 # 32 kbps
+      - type: "amrnb_codec"
+        noise_ratio: 0.5
+        # cycles AMR-NB's eight standard source bitrates
+        bitrates: [4750, 5150, 5900, 6700, 7400, 7950, 10200, 12200]
+
+  val:
+    dataset_type: "StandardDataset"
+    dataset_names: ["ceb_pld"]
+    parquet_files: ["manifests/splits_norm/val.parquet"]
+    batch_size: 16
+    shuffle: False
+    num_workers: 2
+    target_sr: 16000
+    mono: True
+    max_len: 64600
+    base_transform:
+      - type: "pad"
+        max_len: 64600
+        pad_type: "repeat"
+        random_pad: False
+    # No augmentation on validation -- it selects the checkpoint, so it
+    # must stay a fixed target across every run in the matrix.
+
+model:
+  type: "StandardDetector"
+  frontend:
+    type: "wav2vec2"
+    args:
+      source: "huggingface"
+      ckpt_path: "facebook/wav2vec2-xls-r-300m"
+      freeze: False # jointly fine-tuned with the backend
+  backend:
+    type: "AASIST"
+    args:
+      input_dim: 1024
+  loss:
+    # OCAngleLayer requires all four of these -- none have defaults
+    # (oc_softmax.py:20-23). Values are the canonical ones from the
+    # OC-Softmax paper (Zhang, Jiang & Duan, arXiv:2010.13995) that
+    # the module's own docstring cites: m0=0.9, m1=0.2, alpha=20.
+    - type: "OCSoftmax"
+      weight: 1.0
+      embedding_dim: 160 # AASIST output: 5 x gat_dims[1] (32) = 160
+      w_posi: 0.9 # bonafide margin  (paper m0)
+      w_nega: 0.2 # spoof margin     (paper m1)
+      alpha: 20.0 # scale
+
+training:
+  epochs: 5
+  device: "cuda"
+
+  gradient_accumulation_steps: 4
+  batch_log_interval: 500
+
+  optimizer:
+    type: "adam"
+    lr: 0.000001 # low LR: the frontend is unfrozen
+
+    # Clip the global gradient norm before every step. NOT a stock
+    # deepfense key -- read by the patched build_optimizer in
+    # deepfense_patches.py, and ignored by the stock optimizer
+    # factories, so it is inert without the patch.
+    #
+    # deepfense has no clipping at all: loss.backward() runs straight
+    # into optimizer.step(), so one outlier batch can move a 300M
+    # model a long way.
+    #
+    # Doubles as the diagnostic for the epoch-3 divergence: frequent
+    # [grad-clip] lines mean the LR is too high for this data; no
+    # lines at all mean that divergence was NOT a gradient spike.
+    max_grad_norm: 5.0
+  scheduler:
+    # The registered NAME is "cosine", not "cosine_annealing" -- the
+    # Scheduler registry knows only step_lr / cosine / exponential
+    # (schedulers/utils.py:5-24). It does build torch's
+    # CosineAnnealingLR, and T_max / eta_min are the only keys it
+    # reads, so nothing about the schedule changes. This never
+    # surfaced in the smoke runs because those configs have no
+    # scheduler block at all.
+    type: "cosine"
+    # 30, NOT 5 -- deliberately mismatched to `epochs`, and this is the
+    # most important line in the file.
+    #
+    # CosineAnnealingLR decays over T_max epochs. With T_max equal to a
+    # short epoch count, the LR collapses almost immediately:
+    #
+    #     T_max: 3   ->  epoch 1 100%, epoch 2 75%, epoch 3 25%
+    #     T_max: 30  ->  epoch 1 100%, epoch 2 100%, epoch 3 99%,
+    #                    epoch 4 98%, epoch 5 96%
+    #
+    # The 3-epoch run diverged at epoch 3 -- while running at a QUARTER
+    # of base LR, a regime the real run never enters. That made it a
+    # bad preview.
+    #
+    # Setting T_max to the real run's 30 means epochs 1-5 here see
+    # exactly the learning rates epochs 1-5 of the real run will see,
+    # so this test actually predicts something.
+    T_max: 30
+  monitor_metric: "EER"
+  monitor_mode: "min"
+  metrics:
+    EER: {}
+    ACC: {}
+    F1: {}

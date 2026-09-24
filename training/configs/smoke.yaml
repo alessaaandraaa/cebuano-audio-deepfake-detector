@@ -1,0 +1,130 @@
+# ---------------------------------------------------------------------------
+# smoke.yaml -- pipeline smoke test, NOT a real experiment
+# ---------------------------------------------------------------------------
+#
+# Purpose: prove the whole chain works end to end before committing to a
+# multi-day run. Config parses, XLS-R loads, AASIST attaches, one epoch
+# completes, EER computes, a checkpoint is written.
+#
+# Deliberately cheap:
+#   - frontend FROZEN (no backprop through 300M params)
+#   - 1 epoch, small batch
+#   - no codec augmentation (that is a separate variable to verify)
+#
+# Schema notes -- these were verified against the INSTALLED package, not
+# the README, which is wrong in three places:
+#
+#   1. dataset_type is REQUIRED per split (data_utils.py:75).
+#      Registered value: "StandardDataset".
+#   2. dataset_names is REQUIRED per split. detection_dataset.py:89 does
+#      self.dataset_names[i] with no None guard, so omitting it raises
+#      TypeError rather than defaulting.
+#   3. Transform arguments are FLAT, not nested under `args:`.
+#      registry.py:117 pops "type" and passes everything else as
+#      **kwargs, so an `args:` block would be passed as a kwarg named
+#      "args" and blow up.
+#
+#   Do NOT put load_audio in base_transform -- StandardDataset already
+#   calls it internally (detection_dataset.py:143) using the split's
+#   target_sr / mono keys. Listing it again passes the waveform where a
+#   path is expected.
+#
+#   label_map and sampling_rate at the `data:` level ARE propagated down
+#   to each split by the CLI (train.py:115-125), so they can stay here.
+#
+# Build the smoke manifests first (PowerShell, one line):
+#
+#   python training\build_manifests.py --bonafide-root data\processed\bonafide --spoof-root meta-mms=data\processed\meta-mms --spoof-root elevenlabs=data\processed\elevenlabs --speaker-manifest manifests\manifest_bonafide.csv --out manifests\splits_smoke --max-speakers 6 --max-clips-per-speaker 40
+#
+# Then:
+#
+#   deepfense train --config training\configs\smoke.yaml
+#
+# What to record from this run:
+#   - wall-clock per epoch  (extrapolate to the real run)
+#   - peak memory
+#   - whether the dataloader starves the GPU
+# ---------------------------------------------------------------------------
+
+exp_name: "ceb_smoke"
+output_dir: "./outputs/"
+seed: 42
+
+data:
+  sampling_rate: 16000
+  label_map: { "bonafide": 1, "spoof": 0 }
+
+  train:
+    dataset_type: "StandardDataset"
+    dataset_names: ["ceb_smoke"]
+    parquet_files: ["manifests/splits_smoke/train.parquet"]
+    batch_size: 8
+    shuffle: True
+    # 0 on purpose: deepfense's build_transforms_pipeline returns a
+    # closure, which cannot be pickled, and Windows DataLoader workers
+    # use spawn (which pickles). Any num_workers > 0 dies with
+    #   AttributeError: Can't pickle local object
+    #     'build_transforms_pipeline.<locals>.pipeline'
+    # For the real run, launch via run_training.py, which patches in a
+    # picklable pipeline so workers actually work.
+    num_workers: 0
+    target_sr: 16000
+    mono: True
+    max_len: 64600            # collator cap, ~4.04 s @ 16 kHz
+    base_transform:
+      - type: "pad"
+        max_len: 64600
+        pad_type: "repeat"     # waveform repetition, per methodology
+        random_pad: False
+
+  val:
+    dataset_type: "StandardDataset"
+    dataset_names: ["ceb_smoke"]
+    parquet_files: ["manifests/splits_smoke/val.parquet"]
+    batch_size: 8
+    shuffle: False
+    num_workers: 0
+    target_sr: 16000
+    mono: True
+    max_len: 64600
+    base_transform:
+      - type: "pad"
+        max_len: 64600
+        pad_type: "repeat"
+        random_pad: False
+
+model:
+  type: "StandardDetector"
+  frontend:
+    type: "wav2vec2"
+    args:
+      source: "huggingface"
+      ckpt_path: "facebook/wav2vec2-xls-r-300m"
+      freeze: True               # frozen for the smoke run only
+  backend:
+    type: "AASIST"
+    args:
+      input_dim: 1024            # XLS-R 300M hidden size
+  loss:
+    # OCAngleLayer requires all four of these -- none have defaults
+    # (oc_softmax.py:20-23). Values are the canonical ones from the
+    # OC-Softmax paper (Zhang, Jiang & Duan, arXiv:2010.13995) that
+    # the module's own docstring cites: m0=0.9, m1=0.2, alpha=20.
+    - type: "OCSoftmax"
+      weight: 1.0
+      embedding_dim: 160     # AASIST output: 5 x gat_dims[1] (32) = 160
+      w_posi: 0.9            # bonafide margin  (paper m0)
+      w_nega: 0.2            # spoof margin     (paper m1)
+      alpha: 20.0            # scale
+
+training:
+  epochs: 1
+  device: "cuda"
+  optimizer:
+    type: "adam"
+    lr: 0.000001
+  monitor_metric: "EER"
+  monitor_mode: "min"
+  metrics:
+    EER: {}
+    ACC: {}

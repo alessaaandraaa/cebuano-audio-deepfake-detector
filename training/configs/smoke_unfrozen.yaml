@@ -1,0 +1,117 @@
+# ---------------------------------------------------------------------------
+# smoke_unfrozen.yaml -- does joint fine-tuning fit in 8 GB?
+# ---------------------------------------------------------------------------
+#
+# This is smoke.yaml with EXACTLY ONE change: freeze: False.
+# Everything else -- batch size, max_len, workers, seed, data -- is
+# identical, so the only thing the timing difference can be attributed
+# to is unfreezing the frontend.
+#
+# Baseline to compare against (smoke.yaml, frozen):
+#
+#     0.637 s/it   (1.57 it/s, 40 batches in 25 s)
+#
+# How to read the result:
+#
+#   ~1.5-3 s/it    Unfrozen fits. Joint fine-tuning is viable and your
+#                  methodology stands as written. Expect roughly 3x the
+#                  frozen epoch time.
+#
+#   >20 s/it       It is spilling into shared system memory again. The
+#                  optimiser state alone is the problem:
+#
+#                      XLS-R weights (fp32)   1.2 GB
+#                      gradients              1.2 GB
+#                      Adam moments (m, v)    2.4 GB
+#                      ----------------------------
+#                      before any activations 4.8 GB
+#
+#                  On an 8 GB card with Windows display overhead there
+#                  is not much headroom left. If this happens, try
+#                  batch_size: 4 below; if that still spills, joint
+#                  fine-tuning is not viable on this GPU and the
+#                  options are gradient checkpointing, partial
+#                  unfreezing, or training frozen and rewording the
+#                  thesis.
+#
+# Watch VRAM while it runs, in a second terminal:
+#
+#     nvidia-smi -l 2
+#
+# Run:
+#
+#     $env:PYTHONUTF8=1
+#     deepfense train --config training\configs\smoke_unfrozen.yaml
+# ---------------------------------------------------------------------------
+
+exp_name: "ceb_smoke_unfrozen"
+output_dir: "./outputs/"
+seed: 42
+
+data:
+  sampling_rate: 16000
+  label_map: { "bonafide": 1, "spoof": 0 }
+
+  train:
+    dataset_type: "StandardDataset"
+    dataset_names: ["ceb_smoke"]
+    parquet_files: ["manifests/splits_smoke/train.parquet"]
+    batch_size: 4 # drop to 4 if this spills
+    shuffle: True
+    num_workers: 0
+    target_sr: 16000
+    mono: True
+    max_len: 64600 # ~4.04 s @ 16 kHz
+    base_transform:
+      - type: "pad"
+        max_len: 64600
+        pad_type: "repeat"
+        random_pad: False
+
+  val:
+    dataset_type: "StandardDataset"
+    dataset_names: ["ceb_smoke"]
+    parquet_files: ["manifests/splits_smoke/val.parquet"]
+    batch_size: 8
+    shuffle: False
+    num_workers: 0
+    target_sr: 16000
+    mono: True
+    max_len: 64600
+    base_transform:
+      - type: "pad"
+        max_len: 64600
+        pad_type: "repeat"
+        random_pad: False
+
+model:
+  type: "StandardDetector"
+  frontend:
+    type: "wav2vec2"
+    args:
+      source: "huggingface"
+      ckpt_path: "facebook/wav2vec2-xls-r-300m"
+      freeze: False # <-- THE ONLY DIFFERENCE FROM smoke.yaml
+  backend:
+    type: "AASIST"
+    args:
+      input_dim: 1024
+  loss:
+    - type: "OCSoftmax"
+      weight: 1.0
+      embedding_dim: 160 # AASIST: 5 x gat_dims[1] (32) = 160
+      w_posi: 0.9
+      w_nega: 0.2
+      alpha: 20.0
+
+training:
+  epochs: 25
+  device: "cuda"
+  optimizer:
+    type: "adam"
+    lr: 0.000001
+  monitor_metric: "EER"
+  monitor_mode: "min"
+  metrics:
+    EER: {}
+    ACC: {}
