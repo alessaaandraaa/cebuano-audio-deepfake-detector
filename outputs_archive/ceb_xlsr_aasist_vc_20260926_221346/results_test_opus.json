@@ -1,0 +1,14 @@
+{
+  "condition": "test_opus",
+  "note": "recomputed from saved per-clip predictions; loss is not recoverable and is omitted",
+  "EER": 0.012395736793327164,
+  "n_clips": 17264,
+  "elevenlabs": {
+    "EER": 0.023541587425736754,
+    "n_spoof": 4498
+  },
+  "voice-conv": {
+    "EER": 0.0007103887247101527,
+    "n_spoof": 4134
+  }
+}

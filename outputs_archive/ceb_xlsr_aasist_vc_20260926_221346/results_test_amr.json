@@ -1,0 +1,14 @@
+{
+  "condition": "test_amr",
+  "note": "recomputed from saved per-clip predictions; loss is not recoverable and is omitted",
+  "EER": 0.019925857275254866,
+  "n_clips": 17264,
+  "elevenlabs": {
+    "EER": 0.03488732609406055,
+    "n_spoof": 4498
+  },
+  "voice-conv": {
+    "EER": 0.0036098676272579558,
+    "n_spoof": 4134
+  }
+}
