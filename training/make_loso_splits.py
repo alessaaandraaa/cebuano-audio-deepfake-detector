@@ -235,8 +235,12 @@ def check_disjoint(built, held_out):
         if leaked:
             problems.append(f"{name} contains {leaked} {held_out} clips")
 
+    # Bonafide rows carry spoof_method "none", so they must be excluded
+    # before checking which SYSTEMS are present -- otherwise the check
+    # fails on a correctly built test_unseen, which is bonafide + S.
+    _unseen = built["test_unseen"]
     unseen_systems = set(
-        built["test_unseen"]["spoof_method"].dropna().unique()
+        _unseen.loc[~_unseen["is_bonafide"], "spoof_method"].dropna().unique()
     )
 
     if unseen_systems != {held_out}:

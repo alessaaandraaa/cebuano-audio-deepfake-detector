@@ -52,12 +52,12 @@ WHY THESE OPERATIONS AND NOT OTHERS
 
 This follows the shortcut-artefact pipeline introduced for ASVspoof 5
 (Wang et al., arXiv:2502.08857), which is the closest thing this field
-has to a standard for the problem. That pipeline reduces the mismatch
-between bonafide and spoof in three quantities -- peak waveform
-amplitude, leading/trailing non-speech duration, and utterance duration
--- and reports per-feature EER before and after. Peak amplitude alone
-went from 99.71% to 53.80% EER for one attack; leading non-speech from
-60.61% to 47.98%.
+has to a standard for the problem. That pipeline (their Section 4.2,
+"Shortcut artefacts") reduces the mismatch between bonafide and spoof in
+three quantities -- peak waveform amplitude, leading/trailing non-speech
+duration, and utterance duration. Its evidence is Figure 5, which plots
+the DISTRIBUTIONS of five such artefacts before and after processing.
+It reports NO per-feature EER -- do not quote one.
 
 Concretely they "linearly scale the waveform by a factor r so that the
 peak amplitude max r|x| is equal to 1.0", trim non-speech at

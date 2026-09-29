@@ -80,6 +80,39 @@ def list_transforms() -> int:
     return 0
 
 
+def run_test(passthrough: list) -> int:
+    """
+    Hand off to DeepFense's test command, in this process.
+
+    Needed for the DEGRADED test conditions. A clean test config has no
+    augment_transform and works with the bare `deepfense test` CLI, but
+    an Opus or AMR-NB test config does not: the CLI never imports
+    codec_opus_amr, so the transforms are unregistered and the run dies
+    with KeyError: 'opus_codec'.
+
+    Keep num_workers at 0 in the test block. cli/commands/test.py binds
+    build_dataloader at module import time and deepfense_patches only
+    rebinds it on cli.commands.train, so the unpicklable collate lambda
+    comes back here. Testing is one pass; workers buy nothing.
+    """
+    try:
+        from deepfense.cli.commands.test import test
+    except ImportError as e:
+        print(
+            f"ERROR: could not import deepfense test command: {e}\n"
+            "Is deepfense installed in the active environment?",
+            file=sys.stderr,
+        )
+        return 1
+
+    try:
+        test.main(args=passthrough, standalone_mode=False)
+    except SystemExit as e:
+        return int(e.code or 0)
+
+    return 0
+
+
 def run_train(passthrough: list) -> int:
     """Hand off to DeepFense's train command, in this process."""
     try:
@@ -121,6 +154,16 @@ def main():
         ),
     )
 
+    parser.add_argument(
+        "--test",
+        action="store_true",
+        help=(
+            "Run deepfense TEST instead of train, with the codec "
+            "transforms registered. Required for the Opus / AMR-NB test "
+            "conditions; a clean test config works with the bare CLI."
+        ),
+    )
+
     known, passthrough = parser.parse_known_args()
 
     if known.list_transforms:
@@ -152,7 +195,8 @@ def main():
         print(f"ERROR: {e}", file=sys.stderr)
         sys.exit(1)
 
-    sys.exit(run_train(passthrough))
+    sys.exit(run_test(passthrough) if known.test
+             else run_train(passthrough))
 
 
 if __name__ == "__main__":
