@@ -253,3 +253,15 @@ probe_*.parquet
 
 # editor / script backups
 *.bak
+
+# ---------------------------------------------------------------------------
+# Added while committing the FreeVC work
+# ---------------------------------------------------------------------------
+
+# Virtualenvs. `venv/` was already ignored but the suffixed ones were not,
+# and they are hundreds of MB of installed packages.
+venv*/
+
+# Scratch audio from the WORLD / waveform-filtering experiments that were
+# scoped and rejected. Regenerable, and audio does not belong in git.
+Claude outputs/
