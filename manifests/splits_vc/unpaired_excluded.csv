@@ -1,0 +1,11 @@
+ID,path,label,speaker_id,spoof_method
+0217.111025.005023.0598.2,C:\Users\Ninzz\Programming\ceb-deepfake-detect\data\normalised\elevenlabs\0217\0217.111025.005023.0598.2.wav,spoof,0217,elevenlabs
+0222.111025.023048.0590.2,C:\Users\Ninzz\Programming\ceb-deepfake-detect\data\normalised\elevenlabs\0222\0222.111025.023048.0590.2.wav,spoof,0222,elevenlabs
+0242.111027.073953.0470.2,C:\Users\Ninzz\Programming\ceb-deepfake-detect\data\normalised\elevenlabs\0242\0242.111027.073953.0470.2.wav,spoof,0242,elevenlabs
+0264.111028.080553.0512.2,C:\Users\Ninzz\Programming\ceb-deepfake-detect\data\normalised\elevenlabs\0264\0264.111028.080553.0512.2.wav,spoof,0264,elevenlabs
+0265.111028.065934.0493.2,C:\Users\Ninzz\Programming\ceb-deepfake-detect\data\normalised\elevenlabs\0265\0265.111028.065934.0493.2.wav,spoof,0265,elevenlabs
+0292.120216.050242.0481.2,C:\Users\Ninzz\Programming\ceb-deepfake-detect\data\normalised\elevenlabs\0292\0292.120216.050242.0481.2.wav,spoof,0292,elevenlabs
+0308.120301.065312.0532.2,C:\Users\Ninzz\Programming\ceb-deepfake-detect\data\normalised\elevenlabs\0308\0308.120301.065312.0532.2.wav,spoof,0308,elevenlabs
+0334.120511.024021.0526.2,C:\Users\Ninzz\Programming\ceb-deepfake-detect\data\normalised\elevenlabs\0334\0334.120511.024021.0526.2.wav,spoof,0334,elevenlabs
+0345.120521.052109.0367.2,C:\Users\Ninzz\Programming\ceb-deepfake-detect\data\normalised\elevenlabs\0345\0345.120521.052109.0367.2.wav,spoof,0345,elevenlabs
+0380.120521.052109.0365.2,C:\Users\Ninzz\Programming\ceb-deepfake-detect\data\normalised\elevenlabs\0380\0380.120521.052109.0365.2.wav,spoof,0380,elevenlabs
