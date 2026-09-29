@@ -1,0 +1,126 @@
+# -------------------------------------------------------------------------
+# opus.yaml -- GENERATED, do not edit by hand
+#
+# Written by training/make_ablation_configs.py from training/configs/train_main.yaml.
+# Regenerate rather than editing: the point of this file is that
+# it differs from the base in exactly the keys listed below and
+# nowhere else, and the generator verifies that.
+#
+# Purpose: cross-codec: train Opus, test AMR
+#
+# Differences from the base config:
+#   data.train.augment_transform
+#     base    : [{'type': 'opus_codec', 'noise_ratio': 0.5, 'bitrate_min': 6000, 'bitrate_max': 32000}, {'type': 'amrnb_codec', 'noise_ratio': 0.5, 'bitrates': [4750, 5150, 5900, 6700, 7400, 7950, 10200, 12200]}]
+#     this    : [{'type': 'opus_codec', 'noise_ratio': 0.5, 'bitrate_min': 6000, 'bitrate_max': 32000}]
+#   exp_name
+#     base    : ceb_xlsr_aasist_opus_amr
+#     this    : ceb_opus_only
+#
+# Everything else -- seed, split, batch size, learning rate,
+# scheduler, early stopping -- is identical to the base. That is
+# what makes the comparison valid.
+#
+# Run:
+#   python training\run_training.py --config training\configs\opus.yaml
+# -------------------------------------------------------------------------
+exp_name: ceb_opus_only
+output_dir: ./outputs/
+seed: 42
+data:
+  sampling_rate: 16000
+  label_map:
+    bonafide: 1
+    spoof: 0
+  train:
+    dataset_type: StandardDataset
+    dataset_names:
+    - ceb_pld
+    parquet_files:
+    - manifests/splits_norm/train.parquet
+    batch_size: 4
+    shuffle: true
+    num_workers: 4
+    target_sr: 16000
+    mono: true
+    max_len: 64600
+    base_transform:
+    - type: pad
+      max_len: 64600
+      pad_type: repeat
+      random_pad: true
+    augment_transform:
+    - type: opus_codec
+      noise_ratio: 0.5
+      bitrate_min: 6000
+      bitrate_max: 32000
+  val:
+    dataset_type: StandardDataset
+    dataset_names:
+    - ceb_pld
+    parquet_files:
+    - manifests/splits_norm/val.parquet
+    batch_size: 16
+    shuffle: false
+    num_workers: 2
+    target_sr: 16000
+    mono: true
+    max_len: 64600
+    base_transform:
+    - type: pad
+      max_len: 64600
+      pad_type: repeat
+      random_pad: false
+  test:
+    dataset_type: StandardDataset
+    dataset_names:
+    - ceb_pld
+    parquet_files:
+    - manifests/splits_norm/test.parquet
+    batch_size: 16
+    shuffle: false
+    num_workers: 0
+    target_sr: 16000
+    mono: true
+    max_len: 64600
+    base_transform:
+    - type: pad
+      max_len: 64600
+      pad_type: repeat
+      random_pad: false
+model:
+  type: StandardDetector
+  frontend:
+    type: wav2vec2
+    args:
+      source: huggingface
+      ckpt_path: facebook/wav2vec2-xls-r-300m
+      freeze: false
+  backend:
+    type: AASIST
+    args:
+      input_dim: 1024
+  loss:
+  - type: OCSoftmax
+    weight: 1.0
+    embedding_dim: 160
+    w_posi: 0.9
+    w_nega: 0.2
+    alpha: 20.0
+training:
+  epochs: 30
+  device: cuda
+  gradient_accumulation_steps: 4
+  early_stopping_patience: 7
+  batch_log_interval: 500
+  optimizer:
+    type: adam
+    lr: 1.0e-06
+    max_grad_norm: 5.0
+  scheduler:
+    type: cosine
+    T_max: 30
+  monitor_metric: EER
+  monitor_mode: min
+  metrics:
+    EER: {}
+    ACC: {}
