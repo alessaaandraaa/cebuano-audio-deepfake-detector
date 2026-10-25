@@ -1,0 +1,156 @@
+# train_vc_augval.yaml -- GENERATED, do not edit by hand.
+#
+# Identical to train_vc.yaml except that the VALIDATION set carries the
+# same codec augmentation as training.
+#
+# WHY
+#
+# train_vc.yaml trains on 25% clean / 25% Opus / 25% AMR / 25% both, then
+# selects its best checkpoint on a 100% CLEAN validation set. The model is
+# therefore chosen for the one condition the augmentation is least about,
+# which blunts any augmentation ablation built on it.
+#
+# RawBoost (Tak et al., ICASSP 2022, arXiv:2111.04433) augments the
+# development set for exactly this reason:
+#
+#   "Since the ASVspoof 2019 LA development data exhibits neither encoding
+#    nor transmission variability ... we applied RawBoost also to the
+#    development data"
+#
+# The val transforms here are SEEDED (seed: 42) so the validation set is
+# byte-identical every epoch. Without a seed the selection metric would
+# drift between epochs because the bitrates were redrawn, not because the
+# model changed.
+#
+# This config requires a full retrain. It is provided so the choice is
+# documented and reproducible, not because the existing results need it.
+exp_name: ceb_xlsr_aasist_vc_augval
+output_dir: ./outputs/
+seed: 42
+data:
+  sampling_rate: 16000
+  label_map:
+    bonafide: 1
+    spoof: 0
+  train:
+    dataset_type: StandardDataset
+    dataset_names:
+    - ceb_pld
+    parquet_files:
+    - manifests/splits_vc/train.parquet
+    batch_size: 4
+    shuffle: true
+    num_workers: 4
+    target_sr: 16000
+    mono: true
+    max_len: 64600
+    base_transform:
+    - type: pad
+      max_len: 64600
+      pad_type: repeat
+      random_pad: true
+    augment_transform:
+    - type: opus_codec
+      noise_ratio: 0.5
+      bitrate_min: 6000
+      bitrate_max: 32000
+    - type: amrnb_codec
+      noise_ratio: 0.5
+      bitrates:
+      - 4750
+      - 5150
+      - 5900
+      - 6700
+      - 7400
+      - 7950
+      - 10200
+      - 12200
+  val:
+    dataset_type: StandardDataset
+    dataset_names:
+    - ceb_pld
+    parquet_files:
+    - manifests/splits_vc/val.parquet
+    batch_size: 16
+    shuffle: false
+    num_workers: 2
+    target_sr: 16000
+    mono: true
+    max_len: 64600
+    base_transform:
+    - type: pad
+      max_len: 64600
+      pad_type: repeat
+      random_pad: false
+    augment_transform:
+    - type: opus_codec
+      noise_ratio: 0.5
+      bitrate_min: 6000
+      bitrate_max: 32000
+      seed: 42
+    - type: amrnb_codec
+      noise_ratio: 0.5
+      bitrates:
+      - 4750
+      - 5150
+      - 5900
+      - 6700
+      - 7400
+      - 7950
+      - 10200
+      - 12200
+      seed: 42
+  test:
+    dataset_type: StandardDataset
+    dataset_names:
+    - ceb_pld
+    parquet_files:
+    - manifests/splits_vc/test.parquet
+    batch_size: 16
+    shuffle: false
+    num_workers: 0
+    target_sr: 16000
+    mono: true
+    max_len: 64600
+    base_transform:
+    - type: pad
+      max_len: 64600
+      pad_type: repeat
+      random_pad: false
+model:
+  type: StandardDetector
+  frontend:
+    type: wav2vec2
+    args:
+      source: huggingface
+      ckpt_path: facebook/wav2vec2-xls-r-300m
+      freeze: false
+  backend:
+    type: AASIST
+    args:
+      input_dim: 1024
+  loss:
+  - type: OCSoftmax
+    weight: 1.0
+    embedding_dim: 160
+    w_posi: 0.9
+    w_nega: 0.2
+    alpha: 20.0
+training:
+  epochs: 30
+  device: cuda
+  gradient_accumulation_steps: 4
+  early_stopping_patience: 7
+  batch_log_interval: 500
+  optimizer:
+    type: adam
+    lr: 1.0e-06
+    max_grad_norm: 5.0
+  scheduler:
+    type: cosine
+    T_max: 30
+  monitor_metric: EER
+  monitor_mode: min
+  metrics:
+    EER: {}
+    ACC: {}

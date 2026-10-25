@@ -72,6 +72,7 @@ Usage:
 """
 
 import argparse
+import re
 import sys
 from pathlib import Path
 
@@ -180,12 +181,62 @@ def balance_bonafide(df, n_target, seed):
     return picked
 
 
+SPOOF_SUFFIX_RE = re.compile(r"\.\d$")
+
+
+def paired_bonafide(df, spoof):
+    r"""
+    The bona fide COUNTERPARTS of `spoof`, not a random subsample.
+
+    WHY THIS REPLACED balance_bonafide
+
+    balance_bonafide hit the right COUNT -- one bona fide clip per spoof
+    clip -- by sampling proportionally per speaker, without ever looking
+    at WHICH spoof clips were kept. Measured on holdout_elevenlabs, that
+    produced splits where only 45-52% of spoof clips had their own bona
+    fide twin present. The other half contributed a sentence that appears
+    in one class only.
+
+    That silently removes the paired design. The whole point of generating
+    every spoof from a specific bona fide utterance is that the two classes
+    then differ in synthesis and in nothing else -- same speaker, same
+    words. When a sentence appears on one side only, its content is
+    correlated with the label, and the detector can learn content instead
+    of artefacts. The main splits are 100% paired; the LOSO splits were
+    not, so the two experiments were run under different controls.
+
+    Deriving bona fide FROM the kept spoofs fixes both properties at once:
+    pairing is exact by construction, and 1:1 balance falls out of it
+    rather than being imposed separately.
+
+    Spoof stems carry a single-digit synthesis suffix before the
+    extension (<bonafide-stem>.1, .2). Bona fide stems end in a FOUR-digit
+    utterance number, so stripping exactly one trailing ".<digit>"
+    recovers the counterpart and can never truncate a bona fide stem.
+    """
+    bona = df[df["is_bonafide"]]
+    wanted = set(spoof["ID"].map(lambda s: SPOOF_SUFFIX_RE.sub("", s)))
+
+    picked = bona[bona["ID"].isin(wanted)]
+
+    missing = len(spoof) - len(picked)
+    if missing:
+        print(
+            f"    NOTE: {missing} spoof clip(s) have no bona fide counterpart "
+            f"in this split and are unpaired. build_manifests.py's pairing "
+            f"guard should have removed these upstream.",
+            file=sys.stderr,
+        )
+
+    return picked
+
+
 def compose(df, keep_systems, balance, seed):
     """bonafide + spoofs from keep_systems, optionally class-balanced."""
     spoof = df[~df["is_bonafide"] & df["spoof_method"].isin(keep_systems)]
 
     if balance:
-        bona = balance_bonafide(df, len(spoof), seed)
+        bona = paired_bonafide(df, spoof)
     else:
         bona = df[df["is_bonafide"]]
 
@@ -320,7 +371,23 @@ def build_test_pair(test_df, held_out, others, balance, seed):
     system.
 
     Both spoof sides are therefore trimmed to the smaller of the two,
-    and one bonafide sample is drawn and reused.
+    and ONE bonafide pool is built and reused.
+
+    That pool is the UNION of the counterparts of both spoof sets, not a
+    random sample. A random sample hits the right count while leaving
+    roughly half the spoof clips without their own bona fide twin, which
+    silently drops the paired design -- the sentence then appears in one
+    class only and its content is correlated with the label.
+
+    The two spoof sets come from disjoint speakers (each speaker is
+    assigned to exactly one synthesis system upstream), so their
+    counterparts are disjoint too and the union is twice the size of
+    either spoof side. The class ratio therefore becomes 2:1 rather than
+    1:1. That is deliberate and harmless: EER is threshold-free and
+    insensitive to class ratio, and it is the same shape as the main
+    test split, where one shared bona fide pool is scored against each
+    system in turn. Accuracy at a fixed threshold IS ratio-sensitive, so
+    report EER here and calibrate before quoting accuracy.
     """
     spoof_matched = test_df[
         ~test_df["is_bonafide"] & test_df["spoof_method"].isin(others)
@@ -333,7 +400,12 @@ def build_test_pair(test_df, held_out, others, balance, seed):
         n_spoof = min(len(spoof_matched), len(spoof_unseen))
         spoof_matched = spoof_matched.sample(n=n_spoof, random_state=seed)
         spoof_unseen = spoof_unseen.sample(n=n_spoof, random_state=seed)
-        bona = balance_bonafide(test_df, n_spoof, seed)
+        bona = pd.concat(
+            [
+                paired_bonafide(test_df, spoof_matched),
+                paired_bonafide(test_df, spoof_unseen),
+            ]
+        ).drop_duplicates(subset="ID")
     else:
         bona = test_df[test_df["is_bonafide"]]
 

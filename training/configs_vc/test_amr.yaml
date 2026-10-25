@@ -110,6 +110,7 @@ data:
       - 7950
       - 10200
       - 12200
+      seed: 42
 model:
   type: StandardDetector
   frontend:

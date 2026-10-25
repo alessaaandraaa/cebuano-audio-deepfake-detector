@@ -1,0 +1,148 @@
+# train_vc_amr_only.yaml -- cross-codec ablation, AMR-NB arm.
+#
+# train_vc.yaml with the opus_codec block removed. Nothing else differs:
+# same manifests, model, loss, optimiser, scheduler, epochs, batch size.
+# So any difference against ceb_xlsr_aasist_vc is attributable to the
+# removed Opus augmentation alone.
+#
+# Fills the third row of the augmentation matrix:
+#
+#     train aug        test clean   test Opus   test AMR
+#     none  (noaug)      0.0023      0.0044      0.0123
+#     AMR only (this)      ?           ?           ?
+#     both  (main)       0.0035      0.0066      0.0073
+#
+# The question: noaug beat the augmented model on clean and Opus but lost
+# badly on AMR. If AMR-only matches the main model on AMR while keeping
+# noaug's clean/Opus numbers, the Opus augmentation is pure cost and the
+# deployed model should train on AMR-NB alone.
+#
+# Mirrors training/configs/amr.yaml (exp_name ceb_amr_only), which is the
+# same arm on the MMS corpus. Named ceb_vc_amr_only here so the two corpora
+# do not collide in outputs/.
+# -------------------------------------------------------------------------
+# train_vc.yaml -- voice-conversion corpus, EXPERIMENTAL
+#
+# Identical to training/configs/train_main.yaml except for the three
+# manifest paths and exp_name. Verified mechanically: every other
+# leaf key compares equal, so any difference in the result comes from
+# the corpus and not from the setup.
+#
+#   spoof half A : elevenlabs      (unchanged, voice cloning)
+#   spoof half B : voice-conv      (FreeVC, replaces meta-mms)
+#
+# meta-mms is NOT deleted. manifests/splits_norm and every config
+# built on it still exist; this writes to manifests/splits_vc so both
+# corpora remain trainable and comparable.
+#
+# Run:
+#   python training\run_training.py --config training\configs_vc\train_vc.yaml
+# -------------------------------------------------------------------------
+exp_name: ceb_vc_amr_only
+output_dir: ./outputs/
+seed: 42
+data:
+  sampling_rate: 16000
+  label_map:
+    bonafide: 1
+    spoof: 0
+  train:
+    dataset_type: StandardDataset
+    dataset_names:
+    - ceb_pld
+    parquet_files:
+    - manifests/splits_vc/train.parquet
+    batch_size: 4
+    shuffle: true
+    num_workers: 4
+    target_sr: 16000
+    mono: true
+    max_len: 64600
+    base_transform:
+    - type: pad
+      max_len: 64600
+      pad_type: repeat
+      random_pad: true
+    augment_transform:
+    - type: amrnb_codec
+      noise_ratio: 0.5
+      bitrates:
+      - 4750
+      - 5150
+      - 5900
+      - 6700
+      - 7400
+      - 7950
+      - 10200
+      - 12200
+  val:
+    dataset_type: StandardDataset
+    dataset_names:
+    - ceb_pld
+    parquet_files:
+    - manifests/splits_vc/val.parquet
+    batch_size: 16
+    shuffle: false
+    num_workers: 2
+    target_sr: 16000
+    mono: true
+    max_len: 64600
+    base_transform:
+    - type: pad
+      max_len: 64600
+      pad_type: repeat
+      random_pad: false
+  test:
+    dataset_type: StandardDataset
+    dataset_names:
+    - ceb_pld
+    parquet_files:
+    - manifests/splits_vc/test.parquet
+    batch_size: 16
+    shuffle: false
+    num_workers: 0
+    target_sr: 16000
+    mono: true
+    max_len: 64600
+    base_transform:
+    - type: pad
+      max_len: 64600
+      pad_type: repeat
+      random_pad: false
+model:
+  type: StandardDetector
+  frontend:
+    type: wav2vec2
+    args:
+      source: huggingface
+      ckpt_path: facebook/wav2vec2-xls-r-300m
+      freeze: false
+  backend:
+    type: AASIST
+    args:
+      input_dim: 1024
+  loss:
+  - type: OCSoftmax
+    weight: 1.0
+    embedding_dim: 160
+    w_posi: 0.9
+    w_nega: 0.2
+    alpha: 20.0
+training:
+  epochs: 30
+  device: cuda
+  gradient_accumulation_steps: 4
+  early_stopping_patience: 7
+  batch_log_interval: 500
+  optimizer:
+    type: adam
+    lr: 1.0e-06
+    max_grad_norm: 5.0
+  scheduler:
+    type: cosine
+    T_max: 30
+  monitor_metric: EER
+  monitor_mode: min
+  metrics:
+    EER: {}
+    ACC: {}

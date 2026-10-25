@@ -96,7 +96,7 @@ except ImportError:
           file=sys.stderr)
     sys.exit(1)
 
-from make_vc_pairs import check_pairs, load_split_map, load_speakers
+from preprocessing.freevc.make_vc_pairs import check_pairs, load_split_map, load_speakers
 
 MODELS = {
     "freevc24": "voice_conversion_models/multilingual/vctk/freevc24",

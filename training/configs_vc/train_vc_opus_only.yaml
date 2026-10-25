@@ -1,0 +1,148 @@
+# train_vc_opus_only.yaml -- cross-codec ablation, Opus arm.
+#
+# train_vc.yaml with the amrnb_codec block removed. Nothing else differs.
+# Mirrors train_vc_amr_only.yaml, and training/configs/opus.yaml on the
+# MMS corpus (exp_name ceb_opus_only).
+#
+# WHY THIS RUN EXISTS -- it discriminates between two explanations of the
+# results so far:
+#
+#     train aug      clean     Opus      AMR
+#     none         0.0023   0.0044   0.0123
+#     AMR only     0.0032   0.0056   0.0090
+#     both         0.0035   0.0066   0.0073
+#     Opus only       ?        ?        ?     <- this run
+#
+# The matrix above is monotonic in the NUMBER of codecs, but AMR-only
+# differs from "both" in two ways at once: one fewer codec, and which
+# codec. Opus-only separates them. Prediction registered before running:
+#
+#   If Opus-only lands near 0.0090 on the AMR cell (like AMR-only), the
+#   effect is about augmentation QUANTITY/DIVERSITY -- any codec exposure
+#   buys general channel robustness.
+#
+#   If it lands near 0.0123 (like noaug), the effect is about codec
+#   IDENTITY -- only AMR exposure buys AMR robustness, and the apparent
+#   dose-response is a coincidence of ordering.
+#
+# Those two outcomes imply different deployment advice, so the run is worth
+# its 45 hours either way.
+# -------------------------------------------------------------------------
+# train_vc.yaml -- voice-conversion corpus, EXPERIMENTAL
+#
+# Identical to training/configs/train_main.yaml except for the three
+# manifest paths and exp_name. Verified mechanically: every other
+# leaf key compares equal, so any difference in the result comes from
+# the corpus and not from the setup.
+#
+#   spoof half A : elevenlabs      (unchanged, voice cloning)
+#   spoof half B : voice-conv      (FreeVC, replaces meta-mms)
+#
+# meta-mms is NOT deleted. manifests/splits_norm and every config
+# built on it still exist; this writes to manifests/splits_vc so both
+# corpora remain trainable and comparable.
+#
+# Run:
+#   python training\run_training.py --config training\configs_vc\train_vc.yaml
+# -------------------------------------------------------------------------
+exp_name: ceb_vc_opus_only
+output_dir: ./outputs/
+seed: 42
+data:
+  sampling_rate: 16000
+  label_map:
+    bonafide: 1
+    spoof: 0
+  train:
+    dataset_type: StandardDataset
+    dataset_names:
+    - ceb_pld
+    parquet_files:
+    - manifests/splits_vc/train.parquet
+    batch_size: 4
+    shuffle: true
+    num_workers: 4
+    target_sr: 16000
+    mono: true
+    max_len: 64600
+    base_transform:
+    - type: pad
+      max_len: 64600
+      pad_type: repeat
+      random_pad: true
+    augment_transform:
+    - type: opus_codec
+      noise_ratio: 0.5
+      bitrate_min: 6000
+      bitrate_max: 32000
+  val:
+    dataset_type: StandardDataset
+    dataset_names:
+    - ceb_pld
+    parquet_files:
+    - manifests/splits_vc/val.parquet
+    batch_size: 16
+    shuffle: false
+    num_workers: 2
+    target_sr: 16000
+    mono: true
+    max_len: 64600
+    base_transform:
+    - type: pad
+      max_len: 64600
+      pad_type: repeat
+      random_pad: false
+  test:
+    dataset_type: StandardDataset
+    dataset_names:
+    - ceb_pld
+    parquet_files:
+    - manifests/splits_vc/test.parquet
+    batch_size: 16
+    shuffle: false
+    num_workers: 0
+    target_sr: 16000
+    mono: true
+    max_len: 64600
+    base_transform:
+    - type: pad
+      max_len: 64600
+      pad_type: repeat
+      random_pad: false
+model:
+  type: StandardDetector
+  frontend:
+    type: wav2vec2
+    args:
+      source: huggingface
+      ckpt_path: facebook/wav2vec2-xls-r-300m
+      freeze: false
+  backend:
+    type: AASIST
+    args:
+      input_dim: 1024
+  loss:
+  - type: OCSoftmax
+    weight: 1.0
+    embedding_dim: 160
+    w_posi: 0.9
+    w_nega: 0.2
+    alpha: 20.0
+training:
+  epochs: 30
+  device: cuda
+  gradient_accumulation_steps: 4
+  early_stopping_patience: 7
+  batch_log_interval: 500
+  optimizer:
+    type: adam
+    lr: 1.0e-06
+    max_grad_norm: 5.0
+  scheduler:
+    type: cosine
+    T_max: 30
+  monitor_metric: EER
+  monitor_mode: min
+  metrics:
+    EER: {}
+    ACC: {}

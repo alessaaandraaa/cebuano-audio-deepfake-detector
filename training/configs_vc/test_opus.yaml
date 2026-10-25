@@ -103,6 +103,7 @@ data:
       noise_ratio: 1.0
       bitrate_min: 6000
       bitrate_max: 32000
+      seed: 42
 model:
   type: StandardDetector
   frontend:

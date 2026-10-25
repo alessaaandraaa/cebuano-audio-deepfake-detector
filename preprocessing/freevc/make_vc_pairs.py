@@ -5,36 +5,6 @@ Assigns each source speaker a TARGET VOICE for voice-conversion spoof
 generation, and proves the assignment is safe before a single clip is
 generated.
 
-WHY VOICE CONVERSION
-
-The corpus previously paired ElevenLabs voice cloning with Meta MMS
-text-to-speech. MMS produces a SINGLE synthetic voice per language, and
-the per-generator analysis specified in section 4.10 found that half of
-the spoof class had degenerated into speaker identification:
-
-    per-source EER      meta-mms 0.000237   elevenlabs 0.012254   (52x)
-    trained on MMS only, matched condition          EER 0.0000
-    trained on MMS only, unseen ElevenLabs          EER 0.6040
-
-0.6040 is BELOW CHANCE. The detector had learned "that one voice is
-spoof, everything else is bona fide", so clones wearing real speakers'
-voices were confidently filed as genuine.
-
-Voice conversion replaces it because:
-
-  * It is a distinct attack family, not a relabelling. ASVspoof 2019 LA
-    lists A05, A06, A17, A18 and A19 as VC, separate from its TTS
-    attacks. The training set is four TTS plus two VC; this corpus
-    currently has two TTS and no VC.
-
-  * It is TEXT-FREE. Source speech in, converted speech out, no
-    pronunciation rules or phoneme set. Cebuano cannot break it -- the
-    failure mode that has cost this project the most time.
-
-  * Both confounds die by construction. See below.
-
-THE PAIRING, AND WHY IT IS SHAPED THIS WAY
-
 For each bona fide clip from source speaker A, the audio is converted
 to the voice of target speaker B, giving A's words in B's voice.
 
