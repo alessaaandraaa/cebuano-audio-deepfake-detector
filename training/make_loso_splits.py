@@ -5,30 +5,6 @@ Derives leave-one-system-out manifests from the existing splits, to
 test whether the detector generalises to a synthesis system it has
 never seen.
 
-WHY THIS EXISTS
-
-build_manifests.py makes the split speaker-disjoint, and it is -- on
-the bonafide side. Each bonafide speaker is tied to one synthesis
-method upstream, and their spoof clips travel with them, so no
-bonafide speaker appears in two splits.
-
-But the Meta MMS voice is not a bonafide speaker. It is a single
-synthetic voice wearing whatever speaker_id the utterance it cloned
-happened to carry. So that one voice appears in train, val AND test,
-and speaker-disjointness cannot prevent it, because the repeated thing
-is not in the speaker column.
-
-A detector can therefore learn "this timbre is spoof" and score well
-on roughly half the spoof class without learning anything about
-synthesis. That is speaker identification wearing a detector's coat,
-and it generalises to nothing.
-
-probe_shortcuts.py cannot see this. It has no voice features at all.
-The only way to measure it is to hold a system out of training
-entirely and see what survives.
-
-WHAT IT BUILDS
-
 For each spoof system S, a directory containing four manifests:
 
     train.parquet          bonafide + every system EXCEPT S
@@ -37,31 +13,6 @@ For each spoof system S, a directory containing four manifests:
                            selecting on your own test condition
     test_matched.parquet   bonafide + every system EXCEPT S
     test_unseen.parquet    bonafide + S only
-
-The number that matters is the GAP between test_matched and
-test_unseen for the same checkpoint:
-
-    small gap    the model learned synthesis artefacts. This is the
-                 result that lets you claim a detector rather than a
-                 voice classifier.
-
-    large gap    the model memorised the systems it trained on. Report
-                 it -- with two systems and one MMS voice this is a
-                 real possibility, and a measured limitation is worth
-                 far more than an unexamined headline number.
-
-This mirrors standard practice: ASVspoof's evaluation attacks are
-deliberately disjoint from its training attacks for exactly this
-reason.
-
-BALANCE
-
-Dropping a system halves the spoof side, so bonafide is subsampled to
-match, stratified by speaker so no speaker disappears. The LOSO runs
-therefore see less data than the main run and their absolute EERs are
-NOT comparable to it. Compare test_matched against test_unseen within
-a run; that contrast is internally valid because both use the same
-checkpoint and the same bonafide pool.
 
 Usage:
 

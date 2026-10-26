@@ -8,6 +8,15 @@ skipped because they are reference clips.
 
 Output:
     manifests/missing_elevenlabs.txt
+
+Reads (all paths fixed, no arguments):
+    transcripts/
+    data/processed/elevenlabs/
+    elevenlabs-reference/
+
+Usage:
+
+    python tests\\check_missing_elevenlabs.py
 """
 
 import sys

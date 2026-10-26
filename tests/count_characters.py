@@ -25,14 +25,34 @@ Metadata lines such as:
 
 are ignored.
 
-Usage:
-    python test\count_characters.py --root "C:\path\to\CEB"
+--root is OPTIONAL. It defaults to PLD_CORPUS_ROOT, which this script
+reads from the .env file at the project root (copy .env.example).
+
+Note: .env is read by this script, NOT by your shell. Do NOT write
+"$env:PLD_CORPUS_ROOT" on the command line -- PowerShell expands that to an
+empty string and argparse fails with "expected one argument". Just omit
+--root and let the script read .env.
+
+Usage (PowerShell):
+
+    python tests\count_characters.py
+
+    # point at a different dataset root for one run
+    python tests\count_characters.py --root "D:\other\CEB"
+
 """
 
 import argparse
+import os
 import re
 import sys
 from pathlib import Path
+
+from dotenv import load_dotenv
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+load_dotenv(PROJECT_ROOT / ".env")
+
 from collections import Counter
 
 AUDIO_EXTENSIONS = {
@@ -207,13 +227,27 @@ def main():
 
     parser.add_argument(
         "--root",
-        required=True,
-        help="Path to the dataset root folder",
+        default=None,
+        help=(
+            "Path to the dataset root folder. "
+            "Default: PLD_CORPUS_ROOT from .env"
+        ),
     )
 
     args = parser.parse_args()
 
-    root = Path(args.root)
+    root_raw = args.root or os.environ.get("PLD_CORPUS_ROOT")
+    if not root_raw:
+        print(
+            "ERROR: no corpus root.\n"
+            "  Either pass --root, or copy .env.example to .env and set\n"
+            "  PLD_CORPUS_ROOT to the ORIGINAL PLD CEB corpus (the folder\n"
+            "  holding one directory per speaker).",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    root = Path(root_raw)
 
     if not root.exists():
         print(

@@ -29,12 +29,26 @@ IMPORTANT:
     - Preserves the exact original WAV filename.
     - Sorts the final output numerically by number: 1 -> 100.
     - If a number occurs multiple times, every occurrence is kept.
+
+Reads (all paths fixed, no arguments):
+    PLD_CORPUS_ROOT        set in .env at the project root; this script
+                           reads .env itself, so nothing needs to be set
+                           in your shell (see .env.example)
+    preprocessing/number_mapping/numbers.json
+
+Usage (PowerShell):
+
+    python tests\determine_number_logs.py
+
 """
 
 import json
+import os
 import re
 import sys
 from pathlib import Path
+
+from dotenv import load_dotenv
 
 # ---------------------------------------------------------------------------
 # PATHS
@@ -42,9 +56,18 @@ from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
-RAW_ROOT = Path("C:/Users/Ninzz/Programming/PLD/up-dsp-pld/PLD/CEB")
+load_dotenv(PROJECT_ROOT / ".env")
 
-NUMBERS_JSON_PATH = PROJECT_ROOT / "preprocessing" / "numbers.json"
+_raw = os.environ.get("PLD_CORPUS_ROOT")
+if not _raw:
+    sys.exit(
+        "ERROR: PLD_CORPUS_ROOT is not set.\n"
+        "  Copy .env.example to .env and point PLD_CORPUS_ROOT at the\n"
+        "  original PLD CEB corpus (the folder holding one dir per speaker)."
+    )
+RAW_ROOT = Path(_raw)
+
+NUMBERS_JSON_PATH = PROJECT_ROOT / "preprocessing" / "number_mapping" / "numbers.json"
 
 OUT_FILE = PROJECT_ROOT / "manifests" / "transcripts_regenerate.txt"
 

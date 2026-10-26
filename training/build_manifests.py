@@ -58,25 +58,26 @@ Requires:
 
     pip install pandas pyarrow soundfile
 
-Usage:
+Usage (PowerShell -- a line is continued with a BACKTICK, not a backslash):
 
     # Full dataset
-    python training\build_manifests.py \
-        --bonafide-root data\processed\bonafide \
-        --spoof-root meta-mms=data\processed\meta-mms \
-        --spoof-root elevenlabs=data\processed\elevenlabs \
-        --speaker-manifest manifests\manifest_bonafide.csv \
+    python training\build_manifests.py `
+        --bonafide-root data\processed\bonafide `
+        --spoof-root meta-mms=data\processed\meta-mms `
+        --spoof-root elevenlabs=data\processed\elevenlabs `
+        --speaker-manifest manifests\manifest_bonafide.csv `
         --out manifests\splits
 
     # Small smoke-test subset: 6 speakers, 40 clips each
-    python training\build_manifests.py \
-        --bonafide-root data\processed\bonafide \
-        --spoof-root meta-mms=data\processed\meta-mms \
-        --spoof-root elevenlabs=data\processed\elevenlabs \
-        --speaker-manifest manifests\manifest_bonafide.csv \
-        --out manifests\splits_smoke \
-        --max-speakers 6 \
+    python training\build_manifests.py `
+        --bonafide-root data\processed\bonafide `
+        --spoof-root meta-mms=data\processed\meta-mms `
+        --spoof-root elevenlabs=data\processed\elevenlabs `
+        --speaker-manifest manifests\manifest_bonafide.csv `
+        --out manifests\splits_smoke `
+        --max-speakers 6 `
         --max-clips-per-speaker 40
+
 """
 
 import argparse

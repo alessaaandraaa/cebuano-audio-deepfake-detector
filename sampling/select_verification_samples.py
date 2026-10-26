@@ -56,16 +56,17 @@ Requires:
 
     pip install soundfile
 
-Usage:
+Usage (PowerShell -- a line is continued with a BACKTICK, not a backslash):
 
     python sampling\select_verification_samples.py --seed 42
 
-    python sampling\select_verification_samples.py \
-        --elevenlabs-root data\processed\elevenlabs \
-        --meta-mms-root data\processed\meta-mms \
-        --transcripts-root transcripts \
-        --out data\samples \
+    python sampling\select_verification_samples.py `
+        --elevenlabs-root data\processed\elevenlabs `
+        --meta-mms-root data\processed\meta-mms `
+        --transcripts-root transcripts `
+        --out data\samples `
         --seed 42
+
 """
 
 import argparse

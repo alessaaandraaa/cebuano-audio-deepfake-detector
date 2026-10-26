@@ -22,13 +22,8 @@ Output:
 
 IMPORTANT:
     This script performs corpus-level cleanup to establish the
-    GROUND TRUTH vocabulary distribution for the deepfake dataset.
+    GROUND TRUTH vocabulary distribution for the deepfake dataset, including:
 
-    It intentionally does NOT perform MMS-specific vocoder normalization
-    (like stripping diacritics or comma-padding). That belongs in
-    generate_mms.py.
-
-    It DOES:
   - Remove parenthetical English glosses/translations.
   - Exclude unwanted transcript sources.
   - Handle Random Digit entries according to DIGIT_MODE.
@@ -44,24 +39,41 @@ IMPORTANT:
                  non-Random-Digit utterance is left untouched, since
                  the per-utterance manifest was only built to cover
                  Random Digit recordings.
-      * 10-100 -> expanded via preprocessing/numbers.json, a fixed
+      * 10-100 -> expanded via preprocessing/number_mapping/numbers.json, a fixed
                  corpus-wide mapping, applied regardless of source.
   - Collapse stray/repeated whitespace.
   - Preserve capitalization and original wording.
 
-Usage:
+--root is OPTIONAL. It defaults to PLD_CORPUS_ROOT, which this script
+reads from the .env file at the project root (copy .env.example).
 
-    python preprocessing/extract_transcripts.py \
-        --root "C:/Users/Ninzz/Programming/PLD/up-dsp-pld/PLD/CEB" \
-        --out transcripts
+Note: .env is read by this script, NOT by your shell. Do NOT write
+"$env:PLD_CORPUS_ROOT" on the command line -- PowerShell expands that to an
+empty string and argparse fails with "expected one argument". Just omit
+--root and let the script read .env.
+
+Usage (PowerShell):
+
+    python preprocessing\extract_transcripts.py --out transcripts
+
+    # point at a different corpus for one run
+    python preprocessing\extract_transcripts.py --root "D:\other\corpus" --out transcripts
+
 """
 
 import argparse
+import os
 import csv
 import json
 import re
 import sys
 from pathlib import Path
+
+from dotenv import load_dotenv
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+load_dotenv(PROJECT_ROOT / ".env")
+
 
 # ---------------------------------------------------------------------------
 # TOGGLES
@@ -102,7 +114,7 @@ try:
 except FileNotFoundError:
     print(f"ERROR: Could not find {NUMBERS_JSON_PATH}", file=sys.stderr)
     print(
-        "Please ensure numbers.json exists in the preprocessing/ directory.",
+        "Please ensure numbers.json exists in preprocessing/number_mapping/.",
         file=sys.stderr,
     )
     sys.exit(1)
@@ -396,8 +408,10 @@ def main():
 
     parser.add_argument(
         "--root",
-        required=True,
-        help="Path to the corpus root folder",
+        default=None,
+        help=(
+            "Corpus root. Default: PLD_CORPUS_ROOT from .env"
+        ),
     )
 
     parser.add_argument(
@@ -419,7 +433,18 @@ def main():
 
     args = parser.parse_args()
 
-    root = Path(args.root)
+    root_raw = args.root or os.environ.get("PLD_CORPUS_ROOT")
+    if not root_raw:
+        print(
+            "ERROR: no corpus root.\n"
+            "  Either pass --root, or copy .env.example to .env and set\n"
+            "  PLD_CORPUS_ROOT to the ORIGINAL PLD CEB corpus (the folder\n"
+            "  holding one directory per speaker).",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    root = Path(root_raw)
     out_root = Path(args.out)
     digit_map_path = Path(args.digit_map)
 

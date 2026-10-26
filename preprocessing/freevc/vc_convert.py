@@ -4,6 +4,8 @@ vc_convert.py
 Generates the voice-conversion spoof half from the pairing written by
 make_vc_pairs.py.
 
+This file was previously a script for testing three different VC models. The final study utilizes FreeVC.
+
 For every bona fide clip of source speaker A, the audio is converted to
 the voice of target speaker B, giving A's words in B's voice. Output
 lands beside the other synthesis halves:
@@ -11,63 +13,19 @@ lands beside the other synthesis halves:
     data/processed/bonafide/<A>/<stem>.wav        ->  input
     data/processed/voice-conv/<A>/<stem>.1.wav    ->  output
 
-The .1 suffix matches the convention meta-mms used, so the pairing guard
-in build_manifests.py (which strips a trailing .<digit>) needs no change.
-
-SAMPLE RATE -- READ THIS BEFORE "FIXING" IT
-
-This script writes at the MODEL'S NATIVE RATE (24 kHz for freevc24,
-16 kHz for knnvc) and does NOT resample. That is deliberate.
-
-normalise_corpus.py is the single resampler for the entire corpus --
-"resample to 16 kHz with one resampler", its own words. Bona fide,
-meta-mms and elevenlabs all went through it. If this script resampled
-independently, the VC half would carry a different anti-alias signature
-from every other class, and that is a channel cue perfectly correlated
-with the label: exactly the shortcut probe_shortcuts.py exists to catch.
-
-So the pipeline is:
-
-    vc_convert.py      -> data/processed/voice-conv   (native rate)
-    normalise_corpus.py-> data/normalised/voice-conv  (16 kHz, one resampler)
-    build_manifests.py -> manifests/splits_norm
-
-MODELS
-
-All four are already installed inside venv (coqui-tts 0.27.5) and are
-MIT licensed. No new dependency.
-
-    freevc24      FreeVC, Li, Tu & Xiao, ICASSP 2023. WavLM content
-                  features + speaker embedding + VITS decoder. Text-free,
-                  any-to-any, frame-synchronous so duration is preserved.
-                  This is the default: it is parametric, which maps
-                  cleanly onto the ASVspoof VC attack taxonomy.
-
-    knnvc         kNN-VC, Baas, van Niekerk & Kamper, Interspeech 2023.
-                  Matches WavLM frames against the target's own frames,
-                  then vocodes. Usually higher speaker similarity than
-                  FreeVC, but it is retrieval-based rather than
-                  parametric, and it wants several minutes of target
-                  speech.
-
-    openvoice_v2  OpenVoice v2, tone-colour conversion.
-
 USAGE
 
-    # 0. hear it first, on three pairs, all models side by side
-    python preprocessing\vc_convert.py --audition
+    *Dry Run*
+    python preprocessing\freevc\vc_convert.py --model freevc24
 
-    # 1. dry run -- counts the work, proves the mapping is still safe
-    python preprocessing\vc_convert.py --model freevc24
+    *Formal Generation*
+    python preprocessing\freevc\vc_convert.py --model freevc24 --apply
 
-    # 2. generate (resumable; rerun after an interruption)
-    python preprocessing\vc_convert.py --model freevc24 --apply
+    *Verification*
+    python preprocessing\freevc\vc_convert.py --verify
 
-    # 3. check what was written
-    python preprocessing\vc_convert.py --verify
-
-    # small slice for a smoke test
-    python preprocessing\vc_convert.py --model freevc24 --apply --limit 5
+    *Smoke Test*
+    python preprocessing\freevc\vc_convert.py --model freevc24 --apply --limit 5
 
 THE MAPPING IS RE-CHECKED BEFORE ANYTHING IS GENERATED
 
@@ -86,7 +44,9 @@ import sys
 import time
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+# Project root, so `preprocessing.freevc.*` resolves when this file is run
+# directly. parents[0]=freevc, parents[1]=preprocessing, parents[2]=root.
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 try:
     import numpy as np
@@ -100,34 +60,9 @@ from preprocessing.freevc.make_vc_pairs import check_pairs, load_split_map, load
 
 MODELS = {
     "freevc24": "voice_conversion_models/multilingual/vctk/freevc24",
-    "knnvc": "voice_conversion_models/multilingual/multi-dataset/knnvc",
-    "openvoice_v2": "voice_conversion_models/multilingual/multi-dataset/openvoice_v2",
 }
 
-# How much target speech defines the voice. kNN-VC matches against these
-# frames directly, so it wants far more than an embedding model does.
-REF_SECONDS = {"freevc24": 20.0, "openvoice_v2": 20.0, "knnvc": 300.0}
-
-# Models whose reference must be passed as a LIST of short clips rather
-# than one concatenated file.
-#
-# knnvc's _clone_voice wraps whatever it is given into a one-element list
-# and runs get_features on each item -- which pushes the ENTIRE file
-# through WavLM in a single forward pass. A 300 s reference is ~15,000
-# frames, and WavLM-Large self-attention is O(n^2): about 15,000^2 x 16
-# heads x 4 bytes, roughly 14 GB for one layer. That OOMs an 8 GB card
-# before it converts anything.
-#
-# Passing a list makes get_matching_set run WavLM per clip (~2.7 s,
-# ~135 frames) and concatenate the features, which is what kNN-VC's API
-# was designed for. The matching set itself is only
-# 15,000 x 1024 x 4 bytes = 61 MB.
-#
-# freevc24 and openvoice_v2 keep the concatenated file: they embed a
-# speaker vector rather than attending over the reference, they have
-# already produced the generated corpus this way, and changing it would
-# make the existing audio unreproducible.
-CHUNKED_REFERENCE = {"knnvc"}
+REF_SECONDS = {"freevc24": 20.0}
 
 SPOOF_SUFFIX = ".1"
 
@@ -144,7 +79,7 @@ NOOP_CORR = 0.50
 def load_pairs(path: Path) -> list:
     if not path.exists():
         print(f"ERROR: no pairing at {path}\n"
-              f"       Run: python preprocessing\\make_vc_pairs.py --apply",
+              f"       Run: python preprocessing\\freevc\\make_vc_pairs.py --apply",
               file=sys.stderr)
         sys.exit(1)
     with open(path, newline="", encoding="utf-8-sig") as f:
@@ -376,7 +311,7 @@ def guard(pairs_rows: list, args) -> dict:
         for p in problems:
             print(f"  - {p}", file=sys.stderr)
         print("\n  Fix the mapping first:\n"
-              "    python preprocessing\\make_vc_pairs.py --verify",
+              "    python preprocessing\\freevc\\make_vc_pairs.py --verify",
               file=sys.stderr)
         sys.exit(1)
 
@@ -736,7 +671,7 @@ def do_generate(args, pairs_rows, apply: bool):
         return 1
 
     print("\n  Next:")
-    print("    python preprocessing\\vc_convert.py --verify")
+    print("    python preprocessing\\freevc\\vc_convert.py --verify")
     print("    python training\\normalise_corpus.py "
           "--bonafide-root data\\processed\\bonafide "
           "--spoof-root voice-conv=data\\processed\\voice-conv "
@@ -924,7 +859,7 @@ def main() -> int:
     ap.add_argument("--report", default="manifests/vc_generation_report.csv")
     ap.add_argument("--splits-dir", default="manifests/splits_norm")
     ap.add_argument("--vc-speakers",
-                    default="manifests/mms_selected_speakers.csv")
+                    default="manifests/vc_selected_speakers.csv")
     ap.add_argument("--model", default="freevc24", choices=sorted(MODELS))
     ap.add_argument("--device", default="cuda")
     ap.add_argument("--seed", type=int, default=42)

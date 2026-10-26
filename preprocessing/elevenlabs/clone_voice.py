@@ -57,30 +57,32 @@ Requires a .env file at the project root containing:
 
     ELEVENLABS_API_KEY=your_key_here
 
-Usage:
+Usage (PowerShell):
 
     # Process speakers 1-30
-    python preprocessing/elevenlabs/clone_voice.py --batch 1
+    python preprocessing\elevenlabs\clone_voice.py --batch 1
 
     # Process speakers 31-60
-    python preprocessing/elevenlabs/clone_voice.py --batch 2
+    python preprocessing\elevenlabs\clone_voice.py --batch 2
 
     # Process speakers 61-90
-    python preprocessing/elevenlabs/clone_voice.py --batch 3
+    python preprocessing\elevenlabs\clone_voice.py --batch 3
 
     # Use a different batch size
-    python preprocessing/elevenlabs/clone_voice.py --batch 2 --batch-size 20
+    python preprocessing\elevenlabs\clone_voice.py --batch 2 --batch-size 20
 
-    # Process one specific speaker
-    python preprocessing/elevenlabs/clone_voice.py --speaker 0231
-
-    # Test one speaker without affecting batching
-    python preprocessing/elevenlabs/clone_voice.py --speaker 0231
+    # Process one specific speaker (does not affect batching)
+    python preprocessing\elevenlabs\clone_voice.py --speaker 0231
 
     # Enable background-noise removal
-    python preprocessing/elevenlabs/clone_voice.py \
-        --batch 2 \
+    python preprocessing\elevenlabs\clone_voice.py --batch 2 --remove-background-noise
+
+PowerShell continues a command with a BACKTICK, not a backslash:
+
+    python preprocessing\elevenlabs\clone_voice.py `
+        --batch 2 `
         --remove-background-noise
+
 """
 
 import argparse

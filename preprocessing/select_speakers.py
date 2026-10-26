@@ -9,12 +9,14 @@ utterances get sent through Meta MMS for spoof generation.
 Uses a fixed random seed for reproducibility -- rerunning with the same
 seed and manifest always gives the same selection.
 
-Usage:
-    python preprocessing\select_speakers.py \
-        --manifest manifests\manifest_bonafide.csv \
-        --fraction 0.5 \
-        --seed 42 \
+Usage (PowerShell -- a line is continued with a BACKTICK, not a backslash):
+
+    python preprocessing\select_speakers.py `
+        --manifest manifests\manifest_bonafide.csv `
+        --fraction 0.5 `
+        --seed 42 `
         --out manifests\mms_selected_speakers.csv
+
 """
 
 import argparse

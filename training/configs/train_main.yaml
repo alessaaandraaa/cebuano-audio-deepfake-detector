@@ -128,7 +128,6 @@ data:
   # For per-source EER, point parquet_files at two files and name them:
   #   parquet_files:
   #     - "manifests/loso/holdout_elevenlabs/test_matched.parquet"   # mms
-  #     - "manifests/loso/holdout_meta-mms/test_matched.parquet"     # el
   #   dataset_names: ["meta-mms", "elevenlabs"]
   # test.py reports metrics per dataset_name automatically.
   # ---------------------------------------------------------------------

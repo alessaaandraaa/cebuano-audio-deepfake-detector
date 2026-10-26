@@ -45,8 +45,8 @@ it.
 
 Usage:
 
-    python preprocessing\make_vc_pairs.py            # dry run
-    python preprocessing\make_vc_pairs.py --apply
+    python preprocessing\freevc\make_vc_pairs.py            # dry run
+    python preprocessing\freevc\make_vc_pairs.py --apply
 """
 
 import argparse
@@ -219,8 +219,8 @@ def main():
                      "within-split and self-excluding.")
     )
     ap.add_argument("--splits-dir", default="manifests/splits_norm")
-    ap.add_argument("--vc-speakers", default="manifests/mms_selected_speakers.csv",
-                    help="the half being converted (currently the MMS half)")
+    ap.add_argument("--vc-speakers", default="manifests/vc_selected_speakers.csv",
+                    help="the half being converted (the VC half)")
     ap.add_argument("--bonafide-root", default="data/processed/bonafide")
     ap.add_argument("--out", default="manifests/vc_speaker_pairs.csv")
     ap.add_argument("--seed", type=int, default=42)

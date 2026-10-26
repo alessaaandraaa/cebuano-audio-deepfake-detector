@@ -4,18 +4,6 @@ make_ablation_configs.py
 Generates the experiment-matrix configs from train_main.yaml, changing
 one thing each and proving that nothing else moved.
 
-WHY GENERATE RATHER THAN COPY
-
-An ablation is only valid if the runs differ in exactly the variable
-under test. Hand-copying five YAML files and editing each one is how a
-stray batch_size or a forgotten seed ends up in the results table, and
-you cannot tell from the numbers that it happened -- you get a clean
-looking comparison that measures your config instead of your variable.
-
-So this derives every config from one base, applies a named patch, and
-then DIFFS the result back against the base. If anything changed beyond
-the declared keys, it refuses to write the file.
-
 THE MATRIX
 
     noaug              no codec augmentation at all

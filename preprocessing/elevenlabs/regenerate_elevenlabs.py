@@ -20,6 +20,17 @@ If a speaker has no ElevenLabs voice ID, that row is skipped.
 
 Output:
     data/processed/elevenlabs/<speaker>/<wav_stem>.2.wav
+
+Requires:
+    .env at the project root containing ELEVENLABS_API_KEY
+    manifests/elevenlabs_voice_ids.txt mapping speaker_id -> voice ID
+
+Usage:
+
+    python preprocessing\\elevenlabs\\regenerate_elevenlabs.py <tsv>
+
+    # sample: regenerate the utterances listed in a fix-list
+    python preprocessing\\elevenlabs\\regenerate_elevenlabs.py manifests\\regenerate_numbers.tsv
 """
 
 import argparse

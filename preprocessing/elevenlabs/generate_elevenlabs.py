@@ -70,19 +70,13 @@ Examples:
     python preprocessing/elevenlabs/generate_elevenlabs.py --batch 2
 
     # Test first 20 utterances for one speaker
-    python preprocessing/elevenlabs/generate_elevenlabs.py \
-        --speaker 0202 \
-        --limit 20
+    python preprocessing/elevenlabs/generate_elevenlabs.py --speaker 0202 --limit 20
 
     # Test first 20 utterances for every speaker in batch 2
-    python preprocessing/elevenlabs/generate_elevenlabs.py \
-        --batch 2 \
-        --limit 20
+    python preprocessing/elevenlabs/generate_elevenlabs.py --batch 2 --limit 20
 
     # Regenerate existing files
-    python preprocessing/elevenlabs/generate_elevenlabs.py \
-        --batch 2 \
-        --overwrite
+    python preprocessing/elevenlabs/generate_elevenlabs.py --batch 2 --overwrite
 
 Requires:
 

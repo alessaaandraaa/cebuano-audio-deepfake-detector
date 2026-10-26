@@ -8,10 +8,7 @@ at least --min-duration seconds long, and MOVES them into:
     <out>/<speaker_id>/<filename>.wav
 
 Usage:
-    python select_reference_clips.py ^
-        --csv manifests\elevenlabs_selected_speakers.csv ^
-        --audio-root data\processed\bonafide ^
-        --out elevenlabs-reference
+    python preprocessing\elevenlabs\select_reference_clips.py --csv manifests\elevenlabs_selected_speakers.csv  --audio-root data\processed\bonafide --out elevenlabs-reference
 
 Options:
     --min-duration   Minimum clip duration in seconds (default 10.0)

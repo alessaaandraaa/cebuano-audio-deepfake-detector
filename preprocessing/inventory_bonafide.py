@@ -19,16 +19,34 @@ TGL_* transcript sources are excluded automatically.
 The manifest contains one row per INCLUDED audio clip and is labeled
 label=bonafide automatically.
 
-Usage:
-    python preprocessing\inventory_bonafide.py \
-        --root "C:\path\to\bonafide" \
-        --out manifests\manifest_bonafide.csv
+--root is OPTIONAL. It defaults to PLD_CORPUS_ROOT, which this script
+reads from the .env file at the project root (copy .env.example).
+
+Note: .env is read by this script, NOT by your shell. Do NOT write
+"$env:PLD_CORPUS_ROOT" on the command line -- PowerShell expands that to an
+empty string and argparse fails with "expected one argument". Just omit
+--root and let the script read .env.
+
+Usage (PowerShell):
+
+    python preprocessing\inventory_bonafide.py --out manifests\manifest_bonafide.csv
+
+    # point at a different bonafide root for one run
+    python preprocessing\inventory_bonafide.py --root "D:\other\bonafide" --out manifests\manifest_bonafide.csv
+
 """
 
 import argparse
+import os
 import csv
 import sys
 from pathlib import Path
+
+from dotenv import load_dotenv
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+load_dotenv(PROJECT_ROOT / ".env")
+
 from collections import Counter
 
 try:
@@ -454,8 +472,11 @@ def main():
 
     parser.add_argument(
         "--root",
-        required=True,
-        help="Path to bonafide root folder",
+        default=None,
+        help=(
+            "Path to bonafide root folder. "
+            "Default: PLD_CORPUS_ROOT from .env"
+        ),
     )
 
     parser.add_argument(
@@ -466,7 +487,18 @@ def main():
 
     args = parser.parse_args()
 
-    root = Path(args.root)
+    root_raw = args.root or os.environ.get("PLD_CORPUS_ROOT")
+    if not root_raw:
+        print(
+            "ERROR: no corpus root.\n"
+            "  Either pass --root, or copy .env.example to .env and set\n"
+            "  PLD_CORPUS_ROOT to the ORIGINAL PLD CEB corpus (the folder\n"
+            "  holding one directory per speaker).",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    root = Path(root_raw)
 
     if not root.exists():
         print(

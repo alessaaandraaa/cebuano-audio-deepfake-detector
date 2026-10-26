@@ -42,10 +42,11 @@ from pathlib import Path
 
 # Make sibling modules importable regardless of the working directory
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 # Importing this is the whole point -- it fires @register_transform
 import codec_opus_amr  # noqa: F401  (imported for side effects)
-import deepfense_patches
+import training.helpers.deepfense_patches as deepfense_patches
 
 
 def list_transforms() -> int:

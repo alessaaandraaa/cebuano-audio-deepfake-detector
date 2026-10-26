@@ -4,40 +4,7 @@ score_predictions.py
 Computes accuracy, precision, recall and F1 from saved per-sample
 scores, at a threshold calibrated on a held-out split.
 
-WHY THIS EXISTS
-
-deepfense registers exactly three metrics -- EER, ACC and F1_SCORE
-(evaluations/metrics.py). Two of them are unusable as shipped:
-
-  * ACC and F1_SCORE both hardcode `predictions = (scores > 0)`.
-    OC-Softmax scores are not calibrated around zero, so every sample
-    lands on one side of it and ACC collapses to the class prior. That
-    is why every run so far reported ACC 0.4894, which is exactly the
-    bonafide fraction of the validation set.
-
-  * The EER routine DOES compute the equal-error threshold, but
-    Evaluator.evaluate filters it out before returning:
-
-        if "threshold" not in k.lower():
-            results[k] = v
-
-    so the one number you would need to fix the other two never
-    reaches you.
-
-There is no precision or recall metric at all.
-
-EER itself is fine, because it is threshold-free. Everything else has
-to be computed here, from the per-sample scores `deepfense test` writes
-to results/predictions/<dataset>_predictions.txt.
-
-CALIBRATION -- the part that matters
-
-A threshold-dependent metric is meaningless without saying where the
-threshold came from, and choosing it on the same data you report is
-circular: you would be tuning on test and reporting the result as if it
-generalised.
-
-So:
+CALIBRATION 
 
     --calibrate FILE   pick the threshold at the EER point of THIS
                        file, which should be validation
@@ -46,8 +13,7 @@ So:
 If you omit --calibrate, the threshold is taken from the evaluation
 file itself. That is an ORACLE number: it is the best the model could
 have done with perfect threshold knowledge, it is optimistic, and the
-report labels it as such. Use it for a sanity check, never for a
-headline.
+report labels it as such. 
 
 CONFIDENCE INTERVALS
 

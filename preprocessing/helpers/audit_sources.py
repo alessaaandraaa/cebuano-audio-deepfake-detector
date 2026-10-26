@@ -7,18 +7,6 @@ optionally, quarantines unwanted ones.
 Runs in AUDIT MODE by default. Nothing is moved, deleted, or modified
 unless --apply is passed explicitly.
 
-Why this exists:
-
-    EXCLUDE_SOURCE_PREFIXES ("TGL_", "CEB_Utt_Eng") is already applied
-    by inventory_bonafide.py, resample_dataset.py, and
-    extract_transcripts.py. This script verifies that the exclusions
-    actually landed, and surfaces what is still present.
-
-    It also catches the silent gap in those scripts: a clip whose
-    filename has no matching entry in its speaker's .log gets
-    source_file = None and is INCLUDED by default. Those clips are
-    reported here as "<no source in log>".
-
 Audit output:
 
     Every distinct transcript source in the corpus, with clip count,
@@ -49,46 +37,58 @@ Quarantine (--apply):
 Filename convention:
 
     bonafide    0201.111024.022631.0430.wav
-    Meta MMS    0201.111024.022631.0430.1.wav
+    FreeVC    0201.111024.022631.0430.1.wav
     ElevenLabs  0201.111024.022631.0430.2.wav
 
 Requires:
 
     pip install soundfile
 
-Usage:
+--root is OPTIONAL. It defaults to PLD_CORPUS_ROOT, which this script
+reads from the .env file at the project root (copy .env.example).
+
+Note: .env is read by this script, NOT by your shell. Do NOT write
+"$env:PLD_CORPUS_ROOT" on the command line -- PowerShell expands that to an
+empty string and argparse fails with "expected one argument". Just omit
+--root and let the script read .env.
+
+Usage (PowerShell -- a line is continued with a BACKTICK, not a backslash):
 
     # Audit only -- nothing is touched
-    python preprocessing\audit_sources.py \
-        --root "C:\path\to\original\bonafide"
+    python preprocessing\helpers\audit_sources.py
 
     # Audit, and cross-check what survived into the processed set
-    python preprocessing\audit_sources.py \
-        --root "C:\path\to\original\bonafide" \
-        --processed-root data\processed\bonafide \
+    python preprocessing\helpers\audit_sources.py `
+        --processed-root data\processed\bonafide `
         --out manifests\source_audit.csv
 
     # Preview a cut (still does not move anything)
-    python preprocessing\audit_sources.py \
-        --root "C:\path\to\original\bonafide" \
-        --processed-root data\processed\bonafide \
+    python preprocessing\helpers\audit_sources.py `
+        --processed-root data\processed\bonafide `
         --exclude-prefix CEB_Iso_
 
     # Actually quarantine, keeping spoof sets in sync
-    python preprocessing\audit_sources.py \
-        --root "C:\path\to\original\bonafide" \
-        --processed-root data\processed\bonafide \
-        --spoof-root data\processed\meta-mms \
-        --spoof-root data\processed\elevenlabs \
-        --exclude-prefix CEB_Iso_ \
+    python preprocessing\helpers\audit_sources.py `
+        --processed-root data\processed\bonafide `
+        --spoof-root data\processed\meta-mms `
+        --spoof-root data\processed\elevenlabs `
+        --exclude-prefix CEB_Iso_ `
         --apply
+
 """
 
 import argparse
+import os
 import csv
 import sys
 from collections import defaultdict
 from pathlib import Path
+
+from dotenv import load_dotenv
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+load_dotenv(PROJECT_ROOT / ".env")
+
 
 try:
     import soundfile as sf
@@ -489,8 +489,11 @@ def main():
 
     parser.add_argument(
         "--root",
-        required=True,
-        help="Original corpus root (speaker folders with .log files)",
+        default=None,
+        help=(
+            "Original corpus root (speaker folders with .log files). "
+            "Default: PLD_CORPUS_ROOT from .env"
+        ),
     )
 
     parser.add_argument(
@@ -560,7 +563,18 @@ def main():
 
     args = parser.parse_args()
 
-    root = Path(args.root)
+    root_raw = args.root or os.environ.get("PLD_CORPUS_ROOT")
+    if not root_raw:
+        print(
+            "ERROR: no corpus root.\n"
+            "  Either pass --root, or copy .env.example to .env and set\n"
+            "  PLD_CORPUS_ROOT to the ORIGINAL PLD CEB corpus (the folder\n"
+            "  holding one directory per speaker).",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    root = Path(root_raw)
 
     if not root.exists():
         print(f"ERROR: root not found: {root}", file=sys.stderr)

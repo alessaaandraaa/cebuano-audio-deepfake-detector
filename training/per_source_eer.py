@@ -4,17 +4,6 @@ per_source_eer.py
 Per-spoof-system EER from a saved prediction file, without re-running
 the model.
 
-WHY
-
-`deepfense test` reports one EER per entry in data.test.dataset_names.
-Configs that point at a single pooled parquet -- test_opus.yaml,
-test_amr.yaml -- therefore report one pooled number, and a pooled
-number over systems of very different difficulty is the exact thing
-that made the meta-mms corpus look healthy for a month.
-
-The per-clip predictions are saved regardless, so the breakdown can be
-recovered afterwards by joining IDs against the manifest.
-
 Usage:
 
     python training\per_source_eer.py ^

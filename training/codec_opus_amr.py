@@ -3,62 +3,6 @@ codec_opus_amr.py
 
 On-the-fly Opus and AMR-NB codec augmentation, implementing the
 bitrate policy in Section 4.3.2 of the thesis.
-
-Why this exists:
-
-    DeepFense ships a built-in "codec" augmentation, but it exposes
-    only noise_ratio -- there is no way to select Opus vs AMR or to
-    control bitrate. The methodology calls for:
-
-        Opus     stochastic bitrate, 6 kbps - 32 kbps
-        AMR-NB   cycling the eight standard source bitrates
-
-    so the compression is implemented here with ffmpeg instead.
-
-Nothing is written to disk. Audio is piped through ffmpeg in memory,
-so no additional training files are generated -- matching the
-"applied dynamically" requirement.
-
-IMPORTANT -- AMR-NB is an 8 kHz codec:
-
-    AMR-NB cannot encode 16 kHz audio. The transform therefore
-    resamples 16k -> 8k, encodes, decodes, and resamples back to
-    16 kHz. That downsample-upsample round trip is itself part of the
-    channel degradation being simulated (it is what actually happens
-    on a 2G/3G voice call), so it is intentional, not a bug.
-
-    Opus encodes 16 kHz directly, no resampling needed.
-
-IMPORTANT -- throughput, measured:
-
-    Each clip costs TWO ffmpeg process spawns (encode, then decode),
-    and process startup dominates the actual compression work.
-
-    Benchmarked at ~368 ms per 10 s clip, single process
-    (~2.7 clips/s). For a 62,433-clip epoch that is roughly:
-
-        1 worker    ~6.4 hours of augmentation per epoch
-        8 workers   ~48 minutes per epoch
-
-    At 50 epochs this is the difference between a two-day run and a
-    two-week one, so treat it as a real constraint, not a detail.
-
-    Re-run --benchmark on YOUR machine before committing to a long
-    run; core count changes this a lot.
-
-    Mitigations, cheapest first:
-
-      1. noise_ratio 0.5 (the config default) halves the cost -- only
-         half the batch takes the ffmpeg path, and the model still
-         sees both clean and degraded audio.
-      2. Raise dataloader num_workers to at least 8.
-      3. If it is still the bottleneck, replace this module with
-         torchaudio's in-process codec support
-         (torchaudio.io.AudioEffector), which avoids subprocess spawn
-         entirely. Same augmentation, no process overhead -- but
-         verify its AMR-NB support separately, since that is exactly
-         the piece most builds omit.
-
 Registering with DeepFense:
 
     Both transforms register themselves via @register_transform from
@@ -91,15 +35,16 @@ Requires:
 
     pip install numpy soundfile
 
-Usage (standalone self-test -- run this BEFORE wiring into training):
+Usage (standalone self-test -- run this BEFORE wiring into training).
 
     python training\codec_opus_amr.py --self-test
 
-    python training\codec_opus_amr.py \
-        --input data\processed\bonafide\0201\some.wav \
+    python training\codec_opus_amr.py `
+        --input data\processed\bonafide\0201\some.wav `
         --out-dir outputs\codec_preview
 
     python training\codec_opus_amr.py --benchmark --iterations 50
+
 """
 
 import argparse

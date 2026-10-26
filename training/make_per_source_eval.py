@@ -10,41 +10,7 @@ cannot:
   2. CALIBRATED METRICS -- accuracy, precision, recall, F1 and AUC at a
      threshold taken from validation rather than from the test set.
 
-WHY PER-SOURCE MATTERS HERE
-
-Meta MMS is a single synthetic voice. It appears in train, val AND
-test, and speaker-disjointness does not help, because the repeated
-thing is not in the speaker column -- it is the synthesiser's own
-timbre. A detector can memorise that one voice and collect roughly half
-the spoof class for free, and the pooled EER will look excellent while
-hiding it.
-
-The tell is the gap. If meta-mms EER is far below elevenlabs EER, the
-model is partly recognising a voice rather than detecting synthesis.
-
-HOW THE SPLIT WORKS
-
-Both evaluation sets share the SAME bonafide pool -- every bonafide
-clip in the test split, all of them, in both files. Only the spoof side
-differs. That matters: EER is where the false-accept and false-reject
-rates cross, so holding the bonafide side fixed means any difference
-between the two numbers is attributable to the spoof system and nothing
-else.
-
-The spoof counts are NOT equal (elevenlabs 4498, meta-mms 4134 in the
-current split). That is fine -- EER is built from per-class rates, so
-the class ratio does not bias it -- but the smaller set carries a wider
-confidence interval, so compare with the bootstrap intervals from
-score_predictions.py rather than the point estimates alone.
-
 CONFIGS
-
-Both configs are DERIVED from the base training config rather than
-written by hand, and the generator diffs each result back against the
-base and refuses to write anything that differs outside `data.test`.
-The model, frontend, backend and loss blocks must match the checkpoint
-exactly or it will not load, and hand-copying is how a stray
-`input_dim` ends up costing an afternoon.
 
   test_per_source.yaml -> both per-source parquets, reported separately
                           via dataset_names

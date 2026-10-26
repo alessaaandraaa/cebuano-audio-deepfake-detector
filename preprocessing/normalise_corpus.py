@@ -4,40 +4,6 @@ normalise_corpus.py
 Puts every clip in the corpus through one identical processing chain,
 so that the class label stops being readable from production artefacts.
 
-WHY THIS EXISTS -- the measured problem
-
-probe_shortcuts.py, run on the 70/15/15 splits, returned:
-
-    Probe EER  0.0250        (logistic regression, 13 summary stats)
-    Model EER  0.0435        (XLS-R 300M + AASIST, 3 epochs)
-
-A model that cannot hear words beat the detector. The probe also named
-the culprits, and they are not subtle:
-
-    FILE PROVENANCE
-        4041 / 8000 sampled spoof clips are MP3 @ 44.1 kHz
-           0 / 8000 bonafide clips are
-        -> ElevenLabs returns MP3 by default; Meta MMS and the
-           bonafide corpus are both 16 kHz PCM WAV
-
-    SINGLE-FEATURE SEPARABILITY (train)
-        rms_db            EER 0.0680   loudness alone
-        trail_silence_s   EER 0.0940   trailing quiet tail
-        peak_db           EER 0.1565
-        crest_db          EER 0.2010
-        dyn_range_db      EER 0.2788
-
-Loudness is the dominant leak. The TTS systems normalise their output
-and field recordings do not, so "how loud is this file" is very nearly
-a label. Bandwidth, by contrast, is a non-issue here:
-
-        band_7k_8k_ratio  EER 0.4380   (chance)
-        hf_ratio_7k       EER 0.4387   (chance)
-        frac_exact_zero   EER 0.5000   (chance exactly)
-
-so this script does NOT lowpass anything. It fixes what is measurably
-broken and leaves the rest alone.
-
 THE CHAIN
 
 Every file, both classes, no exceptions -- that is the entire point:
@@ -48,68 +14,40 @@ Every file, both classes, no exceptions -- that is the entire point:
     4. peak-normalise so max|x| = 1.0
     5. write 16 kHz mono PCM_16 WAV
 
-WHY THESE OPERATIONS AND NOT OTHERS
 
-This follows the shortcut-artefact pipeline introduced for ASVspoof 5
-(Wang et al., arXiv:2502.08857), which is the closest thing this field
-has to a standard for the problem. That pipeline (their Section 4.2,
-"Shortcut artefacts") reduces the mismatch between bonafide and spoof in
-three quantities -- peak waveform amplitude, leading/trailing non-speech
-duration, and utterance duration. Its evidence is Figure 5, which plots
-the DISTRIBUTIONS of five such artefacts before and after processing.
-It reports NO per-feature EER -- do not quote one.
+LEVEL NORMALISATION IS PEAK, AND ONLY PEAK
 
-Concretely they "linearly scale the waveform by a factor r so that the
-peak amplitude max r|x| is equal to 1.0", trim non-speech at
-probabilistically chosen boundaries, and take a random 4-10 s chunk.
-Notably they do NOT scale utterance energy, having "observed similar
-energy distributions at the pipeline output".
+ASVspoof 5's shortcut-artefact pipeline scales each waveform so its
+peak amplitude equals 1.0, and that is what this script does. Gated
+BS.1770-4 (LUFS) and plain RMS were both implemented and both removed:
+each is defensible in the abstract, neither is what anti-spoofing
+does, and choosing one means defending a departure from the literature
+on your own measurements. Peak is the citable choice.
 
-Utterance duration is handled downstream here rather than in this
-script: the training config crops to a fixed 64600-sample (~4.04 s)
-window, which serves the same purpose.
+A common dither floor was implemented and removed for the same reason,
+and because it backfired when measured: at -75 dBFS the noise sat
+under half a least-significant bit, quiet passages still rounded to
+bit-exact zero, and frac_exact_zero went from 0.5000 (clean) to 0.3115
+(leaking). The dither created the cue it was meant to remove.
 
-OPTIONS THAT ARE OFF BY DEFAULT, AND WHY
+An MP3 encode/decode pass over every file, to give them all the same
+codec history, was implemented and removed too. Measured on a paired
+test, the residual MP3 difference after resampling to 16 kHz was
+already weak (EER 0.4267) and equalising did not measurably improve it
+(0.4000, inside the noise at that sample size). ASVspoof 2021 DF
+applies codecs to create variability, not to remove it.
 
-    --loudness lufs|rms   Gated BS.1770-4 or plain RMS instead of peak.
-                          Both are defensible in the abstract and
-                          NEITHER is what anti-spoofing does. Using one
-                          means defending a departure from the
-                          literature on your own measurements. Peak is
-                          the citable choice.
-
-    --dither-dbfs N       Adds a common noise floor. Standard DSP
-                          before 16-bit quantisation, but using it to
-                          equalise a class difference is not something
-                          this literature does. It also backfired once
-                          here: at -75 dBFS it was quieter than half a
-                          least-significant bit, so quiet passages
-                          still rounded to bit-exact zero and
-                          frac_exact_zero went from 0.5000 (clean) to
-                          0.3115 (leaking) -- the dither CREATED the
-                          cue it was meant to remove.
-
-    --equalise            One MP3 encode/decode pass over everything,
-                          to give every file the same codec history.
-                          Measured on a paired test: the residual MP3
-                          difference after resampling to 16 kHz was
-                          already weak (EER 0.4267) and equalising did
-                          not measurably improve it (0.4000, inside the
-                          noise at that sample size). ASVspoof 2021 DF
-                          applies codecs to create variability, not to
-                          remove it.
-
-If you turn any of these on, the probe should show a measured
-improvement that justifies it. Otherwise leave them off -- an
-unjustifiable preprocessing step is worse than a small residual leak,
-because you have to defend it and you cannot cite it.
+The rule behind all three removals: an unjustifiable preprocessing
+step is worse than a small residual leak, because you have to defend
+it and you cannot cite it.
 
 WHAT ONE GAIN CANNOT FIX
 
 A single gain per file can equalise exactly one level statistic. This
-chain equalises loudness, so `rms_db` goes to chance -- but `peak_db`
-and `crest_db` are then free to vary with the waveform's own peakiness,
-and they may still separate the classes afterwards.
+chain equalises PEAK, so `peak_db` goes to chance by construction --
+but `rms_db` and `crest_db` are then free to vary with the waveform's
+own peakiness, and either may still separate the classes afterwards.
+Check them in the probe rather than assuming the gain fixed them.
 
 That residual is not purely an artefact. TTS output really is more
 dynamically compressed than a field recording, and crest factor is a
@@ -118,10 +56,6 @@ detector is entitled to use. If crest-related features dominate the
 second probe run, the honest move is to report it as a limitation
 rather than to flatten the waveform until it disappears -- over-
 normalising destroys the vocoder artefacts the detector needs.
-
-Same for `noise_floor_db`: dither sets a common floor, but it cannot
-manufacture room tone where there is none, only stop the floor from
-being bit-exact silence.
 
 WHAT THIS DOES NOT TOUCH
 
@@ -138,22 +72,16 @@ AFTER RUNNING
 
 Usage:
 
-    # preflight: is ffmpeg usable? (only needed with --equalise)
-    python training\normalise_corpus.py --check-ffmpeg
-
     # dry run (DEFAULT): sample processed in memory, nothing written
     python training\normalise_corpus.py --bonafide-root data\processed\bonafide --spoof-root meta-mms=data\processed\meta-mms --spoof-root elevenlabs=data\processed\elevenlabs --out-root data\normalised
 
-    # do it -- defaults are the ASVspoof-5-aligned chain
+    # do it -- the chain is the ASVspoof-5-aligned one
     python training\normalise_corpus.py --bonafide-root data\processed\bonafide --spoof-root meta-mms=data\processed\meta-mms --spoof-root elevenlabs=data\processed\elevenlabs --out-root data\normalised --apply --workers 6
 
 """
 
 import argparse
-import hashlib
 import json
-import shutil
-import subprocess
 import sys
 import time
 import warnings
@@ -171,185 +99,6 @@ AUDIO_SUFFIXES = {".wav", ".mp3", ".flac", ".ogg", ".opus", ".m4a", ".aac"}
 # Frame geometry for silence detection and level measurement.
 FRAME_LEN = 400  # 25 ms @ 16 kHz
 FRAME_HOP = 160  # 10 ms @ 16 kHz
-
-# Conservative enough that post-normalisation clipping is rare. A
-# limiter that only fires on some files would reintroduce exactly the
-# level cue this is meant to remove.
-DEFAULT_TARGET_DBFS = -26.0
-
-# 64 kbps at 16 kHz mono is transparent enough not to damage the
-# vocoder artefacts the detector actually needs, while still imposing
-# a common codec history.
-DEFAULT_MP3_BITRATE = "64k"
-
-# Dither has to sit well ABOVE the PCM_16 LSB or quiet passages still
-# round to bit-exact zero, which is the cue it was meant to remove.
-# Measured fraction of silent samples quantising to zero:
-#
-#     -75 dBFS   5.8 LSB    6.80%      <- too quiet, leaks
-#     -65 dBFS  18.4 LSB    2.14%
-#     -60 dBFS  32.8 LSB    1.23%
-#     -55 dBFS  58.3 LSB    0.68%      <- default
-#     -50 dBFS 103.6 LSB    0.38%
-#
-# At -55 the noise sits 29 dB below the -26 dBFS speech target: audible
-# as faint hiss, far gentler than the AMR-NB augmentation already in
-# the methodology, and it also masks the unnaturally clean floor that
-# synthesised audio has. Go louder if frac_exact_zero still leaks.
-DEFAULT_DITHER_DBFS = -55.0
-
-
-# ---------------------------------------------------------------------------
-# FFMPEG
-# ---------------------------------------------------------------------------
-
-
-def ffmpeg_path():
-    exe = shutil.which("ffmpeg")
-
-    if exe is None:
-        raise RuntimeError(
-            "ffmpeg not found on PATH. The codec equalisation step "
-            "cannot run without it."
-        )
-
-    return exe
-
-
-def check_ffmpeg():
-    """Preflight. Returns 0 if the MP3 encoder is usable."""
-    print("=" * 70)
-    print("FFMPEG PREFLIGHT")
-    print("=" * 70)
-
-    try:
-        exe = ffmpeg_path()
-    except RuntimeError as e:
-        print(f"  ERROR: {e}", file=sys.stderr)
-        return 1
-
-    print(f"  ffmpeg: {exe}")
-
-    try:
-        out = subprocess.run(
-            [exe, "-hide_banner", "-encoders"],
-            capture_output=True,
-            text=True,
-            timeout=30,
-        ).stdout
-    except Exception as e:
-        print(f"  ERROR: could not list encoders: {e}", file=sys.stderr)
-        return 1
-
-    if "libmp3lame" not in out:
-        print(
-            "  ERROR: libmp3lame is not compiled into this ffmpeg.\n"
-            "  Install a full build:\n"
-            "      winget install Gyan.FFmpeg.Full\n"
-            "  or:\n"
-            "      conda install -c conda-forge ffmpeg",
-            file=sys.stderr,
-        )
-        return 1
-
-    print("  libmp3lame: present")
-
-    # Prove the round trip actually works rather than trusting the
-    # encoder list -- a codec can be listed and still fail at runtime.
-    probe = (np.random.default_rng(0).normal(0, 0.1, TARGET_SR)).astype(
-        np.float32
-    )
-
-    try:
-        out_audio = mp3_roundtrip(probe, DEFAULT_MP3_BITRATE)
-    except Exception as e:
-        print(f"  ERROR: round trip failed: {e}", file=sys.stderr)
-        return 1
-
-    print(f"  round trip: {len(probe)} -> {len(out_audio)} samples, OK")
-    print()
-    print("RESULT: ready.")
-    return 0
-
-
-def _run_ffmpeg(args, payload):
-    """Run ffmpeg with bytes on stdin, return bytes from stdout."""
-    proc = subprocess.run(
-        args,
-        input=payload,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        timeout=120,
-    )
-
-    if proc.returncode != 0 or not proc.stdout:
-        tail = proc.stderr.decode("utf-8", "replace").strip().splitlines()
-        detail = tail[-1] if tail else "no stderr"
-        raise RuntimeError(f"ffmpeg failed ({proc.returncode}): {detail}")
-
-    return proc.stdout
-
-
-def mp3_roundtrip(x, bitrate=DEFAULT_MP3_BITRATE):
-    """
-    Encode to MP3 and decode straight back, entirely in memory.
-
-    No temp files: the samples go in on stdin and come back on stdout,
-    which matters when this runs across tens of thousands of clips.
-    """
-    exe = ffmpeg_path()
-
-    pcm = np.clip(x, -1.0, 1.0)
-    pcm = (pcm * 32767.0).astype("<i2").tobytes()
-
-    encoded = _run_ffmpeg(
-        [
-            exe,
-            "-hide_banner",
-            "-loglevel",
-            "error",
-            "-f",
-            "s16le",
-            "-ar",
-            str(TARGET_SR),
-            "-ac",
-            "1",
-            "-i",
-            "pipe:0",
-            "-c:a",
-            "libmp3lame",
-            "-b:a",
-            bitrate,
-            "-f",
-            "mp3",
-            "pipe:1",
-        ],
-        pcm,
-    )
-
-    decoded = _run_ffmpeg(
-        [
-            exe,
-            "-hide_banner",
-            "-loglevel",
-            "error",
-            "-f",
-            "mp3",
-            "-i",
-            "pipe:0",
-            "-f",
-            "s16le",
-            "-ar",
-            str(TARGET_SR),
-            "-ac",
-            "1",
-            "pipe:1",
-        ],
-        encoded,
-    )
-
-    return np.frombuffer(decoded, dtype="<i2").astype(np.float32) / 32768.0
-
 
 # ---------------------------------------------------------------------------
 # AUDIO CHAIN
@@ -408,124 +157,26 @@ def trim_silence(x, top_db=40.0, margin_s=0.05):
     return x[start:end]
 
 
-def measure_lufs(x):
+def normalise_level(x, peak_target):
     """
-    Integrated loudness per ITU-R BS.1770 if pyloudnorm is available.
+    Scale the waveform so its peak amplitude equals `peak_target`.
 
-    Returns None when it is not installed, so the caller can fall back
-    to RMS. LUFS is preferable only because it is the citable standard;
-    for killing the rms_db shortcut, RMS works just as well.
+    This is the ASVspoof 5 shortcut-artefact operation. It is a single
+    gain, so it cannot clip, and nothing is limited -- a limiter firing
+    on some files and not others would put a level cue straight back
+    in.
+
+    Returns (audio, applied_gain_db).
     """
-    try:
-        import pyloudnorm
-    except ImportError:
-        return None
+    peak_in = float(np.abs(x).max()) if x.size else 0.0
 
-    if len(x) < TARGET_SR // 2:
-        return None
+    if peak_in <= 0:
+        return x.astype(np.float32), 0.0
 
-    try:
-        meter = pyloudnorm.Meter(TARGET_SR)
-        value = float(meter.integrated_loudness(x.astype(np.float64)))
-    except Exception:
-        return None
+    gain_db = 20.0 * np.log10(peak_target / peak_in)
+    y = (x * (peak_target / peak_in)).astype(np.float32)
 
-    return value if np.isfinite(value) else None
-
-
-def normalise_level(x, target_dbfs, mode):
-    """
-    Apply a single gain so every file lands at the same level.
-
-    Returns (audio, applied_gain_db, clipped). `clipped` is reported
-    rather than silently limited: a limiter firing on some files and
-    not others would put a level cue straight back in.
-    """
-    used = "rms"
-
-    # ASVspoof 5's shortcut-artefact pipeline scales each waveform so
-    # its peak amplitude equals 1.0. Matching that exactly is worth more
-    # than any theoretical advantage of a different level metric,
-    # because it is the operation this field actually performs and can
-    # therefore be cited rather than argued for.
-    if mode == "peak":
-        peak_in = float(np.abs(x).max()) if x.size else 0.0
-
-        if peak_in <= 0:
-            return x.astype(np.float32), 0.0, False, "peak"
-
-        gain_db = 20.0 * np.log10(target_dbfs / peak_in)
-        y = (x * (target_dbfs / peak_in)).astype(np.float32)
-
-        return y, float(gain_db), False, "peak"
-
-    if mode in ("auto", "lufs"):
-        lufs = measure_lufs(x)
-
-        if lufs is not None:
-            gain_db = target_dbfs - lufs
-            used = "lufs"
-        elif mode == "lufs":
-            raise RuntimeError(
-                "pyloudnorm required for --loudness lufs "
-                "(pip install pyloudnorm)"
-            )
-        else:
-            gain_db = None
-    else:
-        gain_db = None
-
-    if gain_db is None:
-        rms = float(np.sqrt(np.mean(x**2) + 1e-20))
-        gain_db = target_dbfs - 20.0 * np.log10(max(rms, 1e-10))
-
-    y = x * (10.0 ** (gain_db / 20.0))
-
-    peak = float(np.abs(y).max()) if y.size else 0.0
-    clipped = peak > 0.999
-
-    if clipped:
-        y = y * (0.999 / peak)
-        gain_db += 20.0 * np.log10(0.999 / peak)
-
-    return y.astype(np.float32), float(gain_db), clipped, used
-
-
-def add_dither(x, level_dbfs, seed_source):
-    """
-    Add a common low-level noise floor to every file.
-
-    Two cues survive loudness normalisation and both come from the same
-    place -- synthesised audio has no room tone:
-
-        frac_exact_zero   a microphone chain essentially never produces
-                          bit-exact zeros; a vocoder does
-        noise_floor_db    the quietest frames of a recording sit on
-                          room tone, a synthesiser's sit on nothing
-
-    Adding identical broadband noise to everything sets a common floor,
-    so neither is a label any more. The level is far below speech, so
-    it does not touch the vocoder artefacts the detector needs.
-
-    This is not a trick: dithering before quantising to 16-bit PCM is
-    standard practice, and it is one sentence to justify in 4.3.2.
-
-    Seeded from the source path, so a re-run reproduces the same output
-    byte for byte.
-    """
-    if level_dbfs is None:
-        return x
-
-    # hashlib, not hash(): Python randomises string hashing per
-    # process, so hash() would give a different noise realisation on
-    # every run and the output would not be reproducible.
-    digest = hashlib.sha256(seed_source.encode("utf-8")).digest()
-    rng = np.random.default_rng(int.from_bytes(digest[:8], "little"))
-
-    amplitude = 10.0 ** (level_dbfs / 20.0)
-    noise = rng.normal(0.0, amplitude, len(x)).astype(np.float32)
-
-    return np.clip(x + noise, -0.999, 0.999).astype(np.float32)
+    return y, float(gain_db)
 
 
 def process_one(job):
@@ -559,24 +210,13 @@ def process_one(job):
 
         x = trim_silence(x, job["top_db"])
 
-        if job["equalise"]:
-            x = mp3_roundtrip(x, job["bitrate"])
-            x = trim_silence(x, job["top_db"])
-
         if len(x) < FRAME_LEN:
             result["error"] = "empty after trim"
             return result
 
-        x, gain_db, clipped, used = normalise_level(
-            x, job["target_dbfs"], job["loudness"]
-        )
-        result["loudness_backend"] = used
-
-        if job["dither_dbfs"] is not None:
-            x = add_dither(x, job["dither_dbfs"], job["src"])
+        x, gain_db = normalise_level(x, job["peak_target"])
 
         result["gain_db"] = gain_db
-        result["clipped"] = bool(clipped)
         result["out_samples"] = int(len(x))
         result["out_rms_db"] = 20.0 * np.log10(
             max(float(np.sqrt(np.mean(x.astype(np.float64) ** 2))), 1e-10)
@@ -626,11 +266,7 @@ def build_jobs(roots, out_root, args, write):
                     "dst": str(dst),
                     "source": source,
                     "top_db": args.top_db,
-                    "target_dbfs": args.target_dbfs,
-                    "loudness": args.loudness,
-                    "equalise": not args.no_equalise,
-                    "bitrate": args.bitrate,
-                    "dither_dbfs": args.dither_dbfs,
+                    "peak_target": args.peak_target,
                     "write": write,
                 }
             )
@@ -778,43 +414,8 @@ def report(results, wrote, out_root):
     else:
         print(
             "    -> WARNING: sources still differ. Check the failures\n"
-            "       above and whether one source is mostly clipping."
+            "       above and whether one source is mostly silence."
         )
-
-    backends = {}
-    for r in ok:
-        key = r.get("loudness_backend", "?")
-        backends[key] = backends.get(key, 0) + 1
-
-    print()
-    print(
-        "  loudness measured by: "
-        + ", ".join(f"{k} x{v}" for k, v in sorted(backends.items()))
-    )
-
-    if backends.get("rms"):
-        print(
-            "    NOTE: RMS averages over pauses, gated BS.1770 (LUFS)\n"
-            "    does not. Where the classes differ in how much silence\n"
-            "    they carry, RMS leaves a residual level difference that\n"
-            "    shows up as peak_db / crest_db separability. Install\n"
-            "    pyloudnorm and re-run if those features are still\n"
-            "    leaking:\n"
-            "        pip install pyloudnorm"
-        )
-
-    clipped = sum(1 for r in ok if r.get("clipped"))
-
-    if clipped:
-        pct = 100.0 * clipped / len(ok)
-        print()
-        print(f"  peak-limited after gain: {clipped} ({pct:.2f}%)")
-
-        if pct > 2.0:
-            print(
-                "    Above ~2% this starts reintroducing a level cue.\n"
-                "    Re-run with a lower --target-dbfs."
-            )
 
     dur = sum(r["out_samples"] for r in ok) / TARGET_SR / 3600.0
     print()
@@ -929,32 +530,12 @@ def main():
     )
 
     parser.add_argument(
-        "--target-dbfs",
-        type=float,
-        default=DEFAULT_TARGET_DBFS,
-        help=f"level target (default: {DEFAULT_TARGET_DBFS})",
-    )
-    parser.add_argument(
-        "--loudness",
-        choices=["peak", "auto", "lufs", "rms"],
-        default="peak",
-        help=(
-            "level normalisation. DEFAULT peak, which scales each "
-            "waveform so its peak amplitude equals --peak-target, "
-            "matching the ASVspoof 5 shortcut-artefact pipeline. "
-            "lufs (gated ITU-R BS.1770-4) and rms are available but "
-            "are NOT what this field does -- prefer peak unless you "
-            "have a measured reason and are willing to defend it. "
-            "auto = lufs when pyloudnorm is present, else rms."
-        ),
-    )
-    parser.add_argument(
         "--peak-target",
         type=float,
         default=1.0,
         help=(
-            "peak amplitude for --loudness peak (default: 1.0, the "
-            "ASVspoof 5 value)"
+            "peak amplitude every waveform is scaled to "
+            "(default: 1.0, the ASVspoof 5 value)"
         ),
     )
     parser.add_argument(
@@ -964,52 +545,6 @@ def main():
         help="silence trim threshold below peak frame (default: 40)",
     )
     parser.add_argument(
-        "--bitrate",
-        default=DEFAULT_MP3_BITRATE,
-        help=f"MP3 bitrate for equalisation (default: {DEFAULT_MP3_BITRATE})",
-    )
-    parser.add_argument(
-        "--dither-dbfs",
-        type=float,
-        default=None,
-        help=(
-            "add a common noise floor at this level, e.g. -55. OFF by "
-            "default. Not something this literature does, and at too "
-            "low a level it creates the very cue it removes: at -75 "
-            "dBFS (under half an LSB) quiet passages still rounded to "
-            "bit-exact zero and frac_exact_zero went 0.5000 -> 0.3115. "
-            "Only enable with a probe result that justifies it."
-        ),
-    )
-    parser.add_argument(
-        "--no-dither",
-        action="store_true",
-        help="skip the dither step",
-    )
-    parser.add_argument(
-        "--equalise",
-        action="store_true",
-        help=(
-            "run an MP3 encode/decode pass over every file. OFF by "
-            "default: measured on a paired test, the residual MP3 "
-            "difference after resampling to 16 kHz was already weak "
-            "(EER 0.4267) and equalising did not measurably improve it "
-            "(0.4000, within noise). It is also not something this "
-            "field does -- ASVspoof 2021 DF applies codecs to create "
-            "variability, not to equalise it."
-        ),
-    )
-    parser.add_argument(
-        "--no-equalise",
-        action="store_true",
-        help=(
-            "skip the MP3 round trip. Only sensible if the probe says "
-            "container/subtype are already balanced across classes."
-        ),
-    )
-
-    parser.add_argument("--check-ffmpeg", action="store_true")
-    parser.add_argument(
         "--report-json",
         default=None,
         help="write the per-file record to this JSON file",
@@ -1017,19 +552,6 @@ def main():
     parser.add_argument("--seed", type=int, default=42)
 
     args = parser.parse_args()
-
-    if args.check_ffmpeg:
-        return check_ffmpeg()
-
-    if args.no_dither:
-        args.dither_dbfs = None
-
-    # --equalise opts IN; --no-equalise is kept so old commands still
-    # parse, but the default is now off.
-    args.no_equalise = not args.equalise or args.no_equalise
-
-    if args.loudness == "peak":
-        args.target_dbfs = args.peak_target
 
     roots = []
 
@@ -1046,18 +568,6 @@ def main():
         )
         return 2
 
-    if not args.no_equalise:
-        try:
-            ffmpeg_path()
-        except RuntimeError as e:
-            print(f"ERROR: {e}", file=sys.stderr)
-            print(
-                "Run --check-ffmpeg for details, or --no-equalise to "
-                "skip the codec step.",
-                file=sys.stderr,
-            )
-            return 1
-
     try:
         jobs, counts = build_jobs(roots, args.out_root, args, args.apply)
     except FileNotFoundError as e:
@@ -1073,20 +583,9 @@ def main():
         print(f"  {source:<14} {counts[source]:>7} files   <- {root}")
 
     print()
-    codec_step = "" if args.no_equalise else f"MP3 {args.bitrate} -> trim -> "
-    dither_step = (
-        ""
-        if args.dither_dbfs is None
-        else f" -> dither {args.dither_dbfs:g} dBFS"
-    )
-    level_step = (
-        f"peak -> {args.peak_target:g}"
-        if args.loudness == "peak"
-        else f"{args.loudness} {args.target_dbfs:g} dBFS"
-    )
     print(
-        f"  chain        : 16 kHz mono -> trim -> {codec_step}"
-        f"{level_step}{dither_step}"
+        f"  chain        : 16 kHz mono -> trim -> "
+        f"peak -> {args.peak_target:g}"
     )
     print(f"  output       : {args.out_root}")
     print(f"  workers      : {args.workers}")

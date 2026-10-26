@@ -1,1430 +1,381 @@
-# Cebuano Audio Deepfake Detector
+# CEBUANO AUDIO DEEPFAKE DETECTOR
 
 Audio deepfake detection for Cebuano speech under real-world transmission conditions.
 
-This repository contains the preprocessing, dataset construction, shortcut analysis, DeepFense training pipeline, and experiment configuration used for the project.
+This repository contains everything used to build the corpus, train the detector and produce the reported results: the preprocessing and synthesis pipeline, the dataset construction, the shortcut analysis, the DeepFense training wrapper and the experiment configurations.
 
----
+The detector is XLS-R 300M + AASIST with OC-Softmax. EER is the primary metric.
 
-## Table of Contents
+## THE CORPUS
 
-* [Overview](#overview)
-* [Repository Structure](#repository-structure)
-* [Requirements](#requirements)
+A paired Cebuano corpus built from the Philippine Languages Database CEB set.
 
-  * [Linux](#linux)
-  * [Windows](#windows)
-* [Environment Setup](#environment-setup)
+- 112,572 clips, 100.39 hours total
+- 140 speakers, 81 female and 59 male
+- bonafide 53.90 h, ElevenLabs 18.50 h, FreeVC 27.99 h
+- every spoof clip has a bonafide clip with the same text, so the detector cannot learn content instead of synthesis artefacts
+- split 70/15/15, speaker-disjoint and gender-stratified
+  The corpus itself is not redistributed with this repository. What is here is the pipeline that builds it from the original PLD CEB corpus.
 
-  * [Linux / Conda](#linux--conda-recommended)
-  * [Windows / venv](#windows--venv)
-* [FFmpeg Requirements](#ffmpeg-requirements)
-* [Dataset Layout](#dataset-layout)
-* [Training Pipeline](#training-pipeline)
+An earlier arm of the study used Meta MMS instead of FreeVC. Those scripts, configs and manifests are still here, since two of the runs in the results ledger are MMS runs. Anything named `meta-mms` belongs to that arm; anything named `voice-conv` or `_vc` belongs to the FreeVC arm, which is the one behind the reported results.
 
-  * [1. Normalize the Corpus](#1-normalize-the-corpus)
-  * [2. Build Manifests](#2-build-manifests)
-  * [3. Pairing Guard](#3-pairing-guard)
-  * [4. Shortcut Probe](#4-shortcut-probe)
-  * [5. DeepFense Preflight](#5-deepfense-preflight)
-  * [6. Train](#6-train)
-* [Training Configurations](#training-configurations)
-* [Experiment Matrix](#experiment-matrix)
-* [What to Monitor](#what-to-monitor)
-* [Long-Running Training](#long-running-training)
-* [Storage Requirements](#storage-requirements)
-* [GPU Requirements](#gpu-requirements)
-* [SVC1 Example Setup](#svc1-example-setup)
-* [Troubleshooting](#troubleshooting)
-* [Important Methodology Notes](#important-methodology-notes)
+## WHAT IS IN THIS REPOSITORY
 
----
+Every folder has its own README with the scripts it holds and the order to run them. Start there for detail; this file is the spine.
 
-# Overview
+**`/preprocessing`** - builds the corpus: transcripts, speaker selection, ElevenLabs and FreeVC generation, resampling and normalisation
 
-The training pipeline is designed around a paired Cebuano speech corpus containing:
+**`/manifests`** - speaker lists, generation records and every train/val/test split
 
-* **Bonafide** human speech
-* **Meta MMS** synthetic speech
-* **ElevenLabs** synthetic / cloned speech
+**`/training`** - manifest building, the DeepFense wrapper, codec augmentation, and all scoring scripts
 
-The pipeline performs:
+**`/tests`** - inspection and sanity-check scripts; none of them modify anything
 
-1. Audio normalization
-2. Speaker-disjoint dataset splitting
-3. Bonafide/spoof pairing
-4. Shortcut analysis
-5. DeepFense runtime preflight
-6. Model training
-7. Codec-based augmentation and evaluation
+**`/sampling`** - draws the stratified sample used for expert linguistic review of the spoof clips
 
-The intended dataset split is:
+**`/transcripts`**, **`/transcripts_mms`** - one .txt per speaker, the ground-truth text for synthesis
 
-```text
-70% train
-15% validation
-15% test
-```
+**`/elevenlabs-reference`** - the reference clips used for voice cloning
 
-The split is **speaker-disjoint** and **gender-stratified**.
+**`/outputs_archive`** - the exact config.yaml each reported checkpoint was trained with
 
----
+`RESULTS_LEDGER.md` and `results_ledger.json` hold every reported metric: EER with bootstrap confidence intervals, AUC, and calibrated accuracy, precision, recall and F1 for all 50 cells.
 
-# Repository Structure
+## SETUP
 
-A simplified repository structure:
+Copy `.env.example` to `.env` and fill it in:
 
-```text
-cebuano-audio-deepfake-detector/
-│
-├── data/
-│   └── ...
-│
-├── manifests/
-│   ├── manifest_bonafide.csv
-│   └── splits_norm/
-│       ├── train.parquet
-│       ├── val.parquet
-│       ├── test.parquet
-│       ├── split_summary.txt
-│       └── unpaired_excluded.csv
-│
-├── training/
-│   ├── run_training.py
-│   ├── normalise_corpus.py
-│   ├── build_manifests.py
-│   ├── probe_shortcuts.py
-│   ├── deepfense_patches.py
-│   ├── codec_opus_amr.py
-│   ├── make_loso_splits.py
-│   ├── make_ablation_configs.py
-│   └── configs/
-│       ├── smoke.yaml
-│       ├── smoke_unfrozen.yaml
-│       ├── timing_2epoch.yaml
-│       └── train_main.yaml
-│
-├── outputs/
-│   └── ...
-│
-├── METHODOLOGY_AUDIT.md
-└── README.md
-```
+- `ELEVENLABS_API_KEY` - only needed to regenerate the ElevenLabs spoofs
+- `PLD_CORPUS_ROOT` - absolute path to the ORIGINAL PLD CEB corpus, the folder holding one directory per speaker
+  Scripts that read the original corpus load `.env` themselves, so `--root` is optional on all of them. `.env` is read by Python, not by your shell, so do NOT type `"$env:PLD_CORPUS_ROOT"` on the command line.
 
-Generated datasets and training outputs are intentionally kept outside version control where appropriate.
+See ENVIRONMENT below for Python, FFmpeg and GPU setup.
 
----
+## PART A - BUILD THE CORPUS
 
-# Requirements
+Run in order. Each step depends on the one before it. Full detail is in `preprocessing/README.md`.
 
-## Linux
+1. **Inventory the bonafide audio.** `python preprocessing\inventory_bonafide.py --out manifests\manifest_bonafide.csv`
+   Produces the speaker and gender manifest that everything downstream reads.
+2. **Extract the transcripts.** `python preprocessing\extract_transcripts.py --out transcripts`
+   One .txt per speaker, with the corpus-level cleanup that establishes the ground-truth vocabulary.
+3. **Resample the bonafide audio to 16 kHz mono.** `python preprocessing\resample_dataset.py --out data\processed\bonafide`
+   Both generation pipelines read `data\processed\bonafide`, so this must run before either of them. Originals are never modified.
+4. **Split the speakers 50/50.** `python preprocessing\select_speakers.py --manifest manifests\manifest_bonafide.csv --fraction 0.5 --seed 42 --out manifests\vc_selected_speakers.csv`
+   Half the speakers go to ElevenLabs, half to FreeVC. Gender-stratified, fixed seed.
+5. **Generate the spoofs.** ElevenLabs and FreeVC are separate pipelines with their own READMEs: `preprocessing/elevenlabs/` and `preprocessing/freevc/`.
+6. **Normalise the corpus.** See PART B step 1 - normalisation is the bridge between the two halves.
 
-Recommended for GPU servers and university supercomputers.
+## PART B - TRAIN AND EVALUATE
 
-Tested environment:
+Run in order. Full detail is in `training/README.md`.
 
-```text
-Linux
-ARM64 / aarch64
-Python 3.10
-Conda
-PyTorch with CUDA support
-NVIDIA GB10
-CUDA 13.0
-```
+### 1. Normalise the corpus
 
-The exact GPU and CUDA version may differ on another machine.
-
-Check the machine:
-
-```bash
-uname -m
-python3 --version
-nvidia-smi
-```
-
-For NVIDIA GPUs, verify that PyTorch can see the GPU:
-
-```bash
-python -c "import torch; print('PyTorch:', torch.__version__); print('CUDA:', torch.cuda.is_available()); print('GPU:', torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'N/A')"
-```
-
-Expected result should indicate:
-
-```text
-CUDA: True
-GPU: <your NVIDIA GPU>
-```
-
----
-
-## Windows
-
-The original development environment uses:
-
-```text
-Python 3.11
-venv
-NVIDIA GPU
-FFmpeg
-```
-
-Create the environment:
+Puts every clip, both classes, through one identical chain: decode to mono float, resample to 16 kHz with one resampler, trim silence at a fixed relative threshold, peak-normalise to 1.0, write PCM_16. This is the ASVspoof 5 shortcut-artefact operation, and it exists so the class label stops being readable from production artefacts rather than from speech.
 
 ```powershell
-py -3.11 -m venv venv
-```
-
-Activate it:
-
-```powershell
-venv\Scripts\activate
-```
-
-Always activate the environment before working on the project.
-
----
-
-# Environment Setup
-
-## Linux / Conda (Recommended)
-
-Conda is recommended for Linux environments, particularly when Python versions and native dependencies need to be isolated.
-
-Install Miniconda if it is not already available.
-
-Then create the DeepFense environment:
-
-```bash
-conda create -n deepfense python=3.10
-```
-
-Activate it:
-
-```bash
-conda activate deepfense
-```
-
-Install DeepFense:
-
-```bash
-pip install deepfense
-```
-
-Install the project's Python dependencies:
-
-```bash
-pip install soundfile librosa pandas numpy
-pip install wandb scikit-learn
-pip install transformers accelerate scipy
-pip install elevenlabs python-dotenv
-```
-
-Install PyTorch according to the CUDA version and architecture of the target machine.
-
-Verify:
-
-```bash
-python -c "import torch; print(torch.__version__); print(torch.cuda.is_available()); print(torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'No GPU')"
-```
-
-### Important
-
-Do not assume that a PyTorch build intended for x86_64 will work on ARM64.
-
-Check the architecture first:
-
-```bash
-uname -m
-```
-
-For example:
-
-```text
-aarch64
-```
-
-means the machine is ARM64.
-
----
-
-## Windows / venv
-
-Create and activate the environment:
-
-```powershell
-py -3.11 -m venv venv
-venv\Scripts\activate
-```
-
-Install PyTorch using the build appropriate for the installed NVIDIA driver/CUDA compatibility.
-
-Then:
-
-```powershell
-pip install soundfile librosa pandas numpy
-pip install wandb scikit-learn
-pip install transformers accelerate scipy
-pip install elevenlabs python-dotenv
-```
-
-The project also provides a Conda-based DeepFense environment:
-
-```powershell
-conda create -n deepfense python=3.10
-conda activate deepfense
-pip install deepfense
-```
-
----
-
-# FFmpeg Requirements
-
-FFmpeg is required by the preprocessing and codec augmentation pipeline.
-
-The FFmpeg build must contain:
-
-* `libopus`
-* `libopencore_amrnb`
-* `libmp3lame`
-
-The important requirement is that these codecs are **compiled into the FFmpeg binary**, not merely installed somewhere on the system.
-
-Check the project-specific requirements:
-
-```bash
-python training/codec_opus_amr.py --check-ffmpeg
-```
-
-and:
-
-```bash
-python training/normalise_corpus.py --check-ffmpeg
-```
-
-A successful preflight should report:
-
-```text
-Opus     encoder 'libopus': AVAILABLE
-AMR-NB   encoder 'libopencore_amrnb': AVAILABLE
-```
-
----
-
-## Linux: User-local FFmpeg
-
-If you do not have administrator/root access, install FFmpeg into a directory inside your home directory.
-
-For example:
-
-```text
-~/bin/ffmpeg
-```
-
-Then add it to your PATH:
-
-```bash
-echo 'export PATH="$HOME/bin:$PATH"' >> ~/.bashrc
-source ~/.bashrc
-```
-
-Verify:
-
-```bash
-which ffmpeg
-```
-
-Then:
-
-```bash
-ffmpeg -encoders | grep -i amr
-```
-
-You should see:
-
-```text
-libopencore_amrnb
-```
-
-Also verify:
-
-```bash
-ffmpeg -buildconf | grep -i opencore
-```
-
-You should see an option similar to:
-
-```text
---enable-libopencore_amrnb
-```
-
-### Important
-
-Not every static FFmpeg build contains AMR-NB support.
-
-If:
-
-```bash
-python training/codec_opus_amr.py --check-ffmpeg
-```
-
-reports:
-
-```text
-AMR-NB ... MISSING
-```
-
-training will fail when the AMR augmentation transform is initialized.
-
-Do not start a long training run until both required codecs are available.
-
----
-
-# Dataset Layout
-
-The normalized dataset should contain three directories:
-
-```text
-normalised/
-├── bonafide/
-├── meta-mms/
-└── elevenlabs/
-```
-
-For example:
-
-```text
-~/archive/normalised/
-├── bonafide/
-├── meta-mms/
-└── elevenlabs/
-```
-
-The exact storage location is machine-dependent.
-
----
-
-# Training Pipeline
-
-Run the following steps **in order**.
-
-```text
-Dataset
-   │
-   ▼
-1. Normalize corpus
-   │
-   ▼
-2. Build manifests
-   │
-   ▼
-3. Pairing guard
-   │
-   ▼
-4. Shortcut probe
-   │
-   ▼
-5. DeepFense preflight
-   │
-   ▼
-6. Train
-```
-
-Each step depends on the previous one.
-
----
-
-# 1. Normalize the Corpus
-
-Normalization puts every audio clip through a consistent processing chain.
-
-This is intended to reduce class-specific production artifacts such as differences in loudness, silence, sampling rate, and related properties.
-
-See `METHODOLOGY_AUDIT.md` for the project's methodology discussion.
-
-## Linux
-
-```bash
-python training/normalise_corpus.py \
-  --bonafide-root data/processed/bonafide \
-  --spoof-root meta-mms=data/processed/meta-mms \
-  --spoof-root elevenlabs=data/processed/elevenlabs \
-  --out-root data/normalised \
-  --apply \
-  --workers 6
-```
-
-## Windows
-
-```powershell
-python training\normalise_corpus.py `
+python preprocessing\normalise_corpus.py `
   --bonafide-root data\processed\bonafide `
-  --spoof-root meta-mms=data\processed\meta-mms `
+  --spoof-root voice-conv=data\processed\voice-conv `
   --spoof-root elevenlabs=data\processed\elevenlabs `
   --out-root data\normalised `
   --apply `
   --workers 6
 ```
 
-### Dry run first
+Leave off `--apply` for a dry run, which processes a sample in memory and reports before/after without writing. Do that first. The real run is not resumable and takes hours on the full corpus. Originals are never touched; output goes to a parallel tree so the before/after probe comparison stays reproducible.
 
-Run the command without:
-
-```text
---apply
-```
-
-This performs the preprocessing as a dry run and reports before/after information.
-
-The normalization process is not resumable.
-
-For the full corpus, expect the process to take significant time.
-
----
-
-# 2. Build Manifests
-
-The manifest builder creates the train/validation/test datasets.
-
-The split is:
-
-```text
-70% train
-15% validation
-15% test
-```
-
-with:
-
-* speaker-disjoint splitting
-* gender stratification
-* paired bonafide/spoof data
-
-## Linux
-
-```bash
-python training/build_manifests.py \
-  --bonafide-root "$HOME/archive/normalised/bonafide" \
-  --spoof-root "meta-mms=$HOME/archive/normalised/meta-mms" \
-  --spoof-root "elevenlabs=$HOME/archive/normalised/elevenlabs" \
-  --speaker-manifest manifests/manifest_bonafide.csv \
-  --out manifests/splits_norm \
-  --unpaired-report manifests/splits_norm/unpaired_excluded.csv
-```
-
-### Important Linux shell note
-
-Do not write:
-
-```bash
---spoof-root meta-mms=~/archive/normalised/meta-mms
-```
-
-The `~` will not necessarily expand correctly when it occurs after `=`.
-
-Use:
-
-```bash
---spoof-root "meta-mms=$HOME/archive/normalised/meta-mms"
-```
-
-instead.
-
-## Windows
+### 2. Build the manifests
 
 ```powershell
 python training\build_manifests.py `
   --bonafide-root data\normalised\bonafide `
-  --spoof-root meta-mms=data\normalised\meta-mms `
+  --spoof-root voice-conv=data\normalised\voice-conv `
   --spoof-root elevenlabs=data\normalised\elevenlabs `
   --speaker-manifest manifests\manifest_bonafide.csv `
-  --out manifests\splits_norm `
-  --unpaired-report manifests\splits_norm\unpaired_excluded.csv
+  --out manifests\splits_vc `
+  --unpaired-report manifests\splits_vc\unpaired_excluded.csv
 ```
 
-### Verify the split
+Then open `manifests\splits_vc\split_summary.txt` and confirm it says `RESULT: speaker-disjoint`. Do not continue if it does not.
 
-Read:
+Manifests contain ABSOLUTE paths, so build them on the machine that will train. Copying manifests between machines does not work.
 
-```text
-manifests/splits_norm/split_summary.txt
-```
+### 3. Check the pairing guard
 
-The leakage check should report:
+The guard drops any spoof clip whose bonafide counterpart is missing, so the 1:1 pairing holds and the detector cannot learn content differences. It reports what it dropped as part of step 2.
 
-```text
-RESULT: speaker-disjoint
-```
+For the MMS corpus the expected result was 367 of 56,653 spoof clips excluded (0.65%) - 357 meta-mms and 10 elevenlabs - leaving 56,286 bonafide and 56,286 spoof.
 
-The manifests contain **absolute paths**, so they should be generated on the machine that will perform training.
+If your number differs from what the summary records for your corpus, investigate upstream before training. `--max-unpaired-frac` (default 0.05) is a safety stop, not a tuning knob. `--allow-unpaired` overrides it and should essentially never be used.
 
----
+### 4. Run the shortcut probe
 
-# 3. Pairing Guard
-
-The dataset uses a paired design.
-
-Each spoof utterance should correspond to a bonafide utterance with the same underlying text.
-
-This helps prevent the detector from simply learning differences in linguistic content between the classes.
-
-The pairing guard removes spoof clips for which no corresponding bonafide clip exists.
-
-For the current corpus, the expected result is:
-
-```text
-Pairing guard: excluded 367 of 56653 spoof clips (0.65%) with no bonafide counterpart.
-```
-
-Expected breakdown:
-
-```text
-meta-mms        357
-elevenlabs       10
-```
-
-After the guard:
-
-```text
-Bonafide: 56,286
-Spoof:    56,286
-```
-
-This gives a:
-
-```text
-1:1 bonafide-to-spoof ratio
-```
-
-### Important
-
-If the number of excluded clips differs from the expected value for the current corpus, investigate the upstream dataset before training.
-
-The pairing guard provides:
-
-```text
---unpaired-report PATH
---max-unpaired-frac F
---allow-unpaired
-```
-
-Defaults include a maximum unpaired fraction of:
-
-```text
-0.05
-```
-
-`--max-unpaired-frac` should be treated as a safety mechanism rather than a tuning parameter.
-
----
-
-# 4. Shortcut Probe
-
-The shortcut probe measures how much of the classification task can be solved using acoustic/file-level features without actually listening to the speech.
-
-Run:
-
-## Linux
-
-```bash
-python training/probe_shortcuts.py \
-  --splits-dir manifests/splits_norm \
-  --eval-split test \
-  --workers 4 \
-  --cache outputs/probe_test.parquet
-```
-
-## Windows
+Measures how much of the task can be solved from acoustic and file-level features alone, without listening to the speech. The number to compare against is the trained detector's EER: if the probe is close to it, the detector may be reading production artefacts.
 
 ```powershell
-python training\probe_shortcuts.py `
-  --splits-dir manifests\splits_norm `
+python training\helpers\probe_shortcuts.py `
+  --splits-dir manifests\splits_vc `
   --eval-split test `
   --workers 4 `
   --cache outputs\probe_test.parquet
 ```
 
-The important comparison is between:
+Run it before and after normalisation and compare. On this corpus, normalisation closed `peak_db`, `rms_db`, `crest_db`, `hf_ratio_7k` and `duration_s`, but opened `trail_silence_s` and `dc_offset`. Report what remains as a limitation rather than normalising until it disappears - over-normalising destroys the vocoder artefacts the detector needs.
 
-```text
-shortcut probe EER
+### 5. Verify the DeepFense patches
+
+```powershell
+python training\helpers\deepfense_patches.py --verify
 ```
 
-and:
+All three checks must pass. The patches fix DeepFense bugs that only bite on Windows, where DataLoader workers are spawned rather than forked, and they enable gradient clipping. Do not skip this.
 
-```text
-trained detector EER
+### 6. Check FFmpeg has both codecs
+
+```powershell
+python training\codec_opus_amr.py --check-ffmpeg
+python training\codec_opus_amr.py --self-test
 ```
 
-A low shortcut-probe EER indicates that some class information may be available through non-content acoustic characteristics.
+You need a build with `libopus` and `libopencore_amrnb`. Training will fail partway through without them.
 
-The current corpus produced a shortcut probe result that was considered a **serious shortcut risk**, particularly around loudness and silence-related features.
+### 7. Train
 
-This should be considered when interpreting model results.
-
----
-
-# 5. DeepFense Preflight
-
-Before training:
-
-```bash
-python training/deepfense_patches.py --verify
+```powershell
+python training\run_training.py --config training\configs_vc\train_vc.yaml
 ```
 
-A successful verification should report:
+Always launch through `run_training.py`, never `deepfense train` directly. The wrapper is what imports `codec_opus_amr.py`, and that import is what registers the `opus_codec` and `amrnb_codec` transforms. The bare CLI never imports it, so a config referencing those transforms fails with a registry KeyError.
 
-```text
-PATCH 1 -- transform pipeline
-PASS
-
-PATCH 2 -- collate function
-PASS
-
-PATCH 2 -- rebind check
-PASS
-
-RESULT: all patches good -- num_workers > 0 is safe.
-```
-
-The patches address runtime issues in DeepFense and enable gradient clipping.
-
-Do not skip this step.
-
----
-
-# 6. Train
-
-Training should be launched through:
-
-```bash
-python training/run_training.py \
-  --config training/configs/train_main.yaml
-```
-
-Do **not** launch the experiment using:
-
-```bash
-deepfense train
-```
-
-The project's `run_training.py` performs project-specific registration and patching required by the pipeline.
-
-Near the beginning of the training log, verify that you see something similar to:
+Early in the log, confirm both of these appear:
 
 ```text
 Applied deepfense patches: ...
 Gradient clipping enabled: max_grad_norm=5.0
 ```
 
-If gradient clipping is missing, stop and investigate before continuing.
+If gradient clipping is missing, stop and investigate.
 
----
+### 8. Score the results
 
-# Training Configurations
+A single checkpoint is evaluated against several test conditions without retraining - clean, Opus and AMR are separate test configs, not separate runs.
 
-Available configurations:
+```powershell
+python training\make_per_source_eval.py --splits-dir manifests\splits_vc --apply
+python training\score_predictions.py --calibrate <val-predictions> --evaluate <test-predictions>
+python training\per_source_eer.py --predictions <predictions> --splits-dir manifests\splits_vc
+python training\speaker_bootstrap.py --pred <predictions> --manifest manifests\splits_vc\test.parquet
+```
 
-| Config                | Epochs | Purpose                                                          |
-| --------------------- | -----: | ---------------------------------------------------------------- |
-| `smoke.yaml`          |      1 | Verify the pipeline with a frozen frontend                       |
-| `smoke_unfrozen.yaml` |      1 | Verify joint fine-tuning fits the available GPU memory           |
-| `timing_2epoch.yaml`  |      5 | Short timing/training test using the real learning-rate schedule |
-| `train_main.yaml`     |     30 | Main training run                                                |
+Use `speaker_bootstrap.py` for confidence intervals and for paired differences between two runs. It resamples SPEAKERS, not clips, because clips from one speaker score alike and clip-level intervals come out too narrow.
 
-The short timing configuration intentionally uses:
+Do not report raw `ACC` as the headline number. OC-Softmax's default threshold is not meaningful; use EER, and use `score_predictions.py` for threshold-dependent metrics at a threshold calibrated on a held-out split.
+
+## TRAINING CONFIGURATIONS
+
+`/configs` holds the MMS arm, `/configs_vc` the FreeVC arm. The FreeVC ones are behind the reported results.
+
+Training configs in `/configs_vc`:
+
+| Config                                         | Purpose                           |
+| ---------------------------------------------- | --------------------------------- |
+| `train_vc.yaml`                                | main run, Opus + AMR augmentation |
+| `noaug.yaml`                                   | no codec augmentation             |
+| `train_vc_opus_only.yaml`                      | Opus augmentation only            |
+| `train_vc_amr_only.yaml`                       | AMR augmentation only             |
+| `train_vc_augval.yaml`                         | augmented validation variant      |
+| `loso_elevenlabs.yaml`, `loso_voice-conv.yaml` | leave-one-system-out              |
+
+The `test_*.yaml` files in the same folder are evaluation configs, not training runs. They score an existing checkpoint against one condition - clean, Opus, AMR, a held-out system, or a validation split.
+
+Scaffolding configs live in `/configs` alongside the MMS arm: `smoke.yaml` (1 epoch, frozen frontend), `smoke_unfrozen.yaml` (1 epoch, checks joint fine-tuning fits in GPU memory) and `timing_2epoch.yaml` (timing test).
+
+The timing config keeps `T_max: 30` even though it runs fewer epochs, so its learning-rate schedule matches the first part of a full run.
+
+## EXPERIMENT MATRIX
+
+```powershell
+python training\make_loso_splits.py --splits-dir manifests\splits_vc --out manifests\loso_vc
+python training\make_ablation_configs.py --apply
+```
+
+The ablation configs are GENERATED from the main config rather than hand-copied, so the arms are guaranteed to differ in exactly the variable under test.
+
+| Run                  | Purpose                                       |
+| -------------------- | --------------------------------------------- |
+| main                 | Opus + AMR augmentation                       |
+| noaug                | effect of codec augmentation                  |
+| opus-only / amr-only | which codec carries the effect                |
+| loso\_`<system>`     | leave-one-synthesis-system-out generalisation |
+
+Run experiments one at a time on a single GPU.
+
+## WHAT TO MONITOR
+
+**Validation EER** - from the first epoch. Compare it against the shortcut-probe floor, not against zero.
+
+**Gradient clipping** - watch for `[grad-clip]`. Frequent clipping suggests the learning rate is aggressive for this dataset.
+
+**Overfitting** - training loss falling while validation loss rises. Early stopping is configured, but watch it anyway.
+
+**Accuracy** - do not use raw `ACC` to judge the run. See step 8.
+
+## BEFORE A LONG RUN
+
+**Storage.** Each checkpoint is about 3.8 GB, and a 30-epoch run produces roughly 40-60 GB depending on how many are kept. Check with `df -h` and `du -sh outputs/`. Keep `train.log` and `results.json` for every experiment that matters - they are small and they are the record.
+
+**GPU.** The tested setup is batch size 4 with gradient accumulation 4, an effective batch of 16. Batch size 8 caused `torch.OutOfMemoryError` on 8 GB VRAM. Do not run games or other GPU jobs during training; two concurrent runs will not fit.
+
+**Persistent session.** On a remote Linux box, never run training in a bare SSH session. Use `tmux new -s deepfense`, start the run, detach with Ctrl+B then D, and reattach later with `tmux attach -t deepfense`.
+
+**Checklist.**
 
 ```text
-T_max: 30
+[ ] correct repository and dataset on the training machine
+[ ] bonafide, ElevenLabs and FreeVC sets all present
+[ ] manifests built ON this machine
+[ ] split_summary.txt says speaker-disjoint
+[ ] pairing guard count matches what the corpus expects
+[ ] shortcut probe run and interpreted
+[ ] ffmpeg has libopus and libopencore_amrnb
+[ ] correct conda/venv active, PyTorch sees CUDA
+[ ] deepfense patches verified
+[ ] enough disk space, no competing GPU jobs
+[ ] persistent session configured
 ```
 
-even though it runs fewer epochs.
+## VERSIONS
 
-This keeps the learning-rate schedule comparable to the first part of the full 30-epoch run.
+The exact environment that produced the reported results. `requirements-lock.txt` holds all 139 resolved packages; these are the ones a reviewer will ask about.
 
----
+**Python 3.11.9** on Windows, **CUDA 12.8**.
 
-# Experiment Matrix
+| Component | Version | Notes |
+| --- | --- | --- |
+| `deepfense` | 0.2.2 | training framework; patched at runtime, see `training/helpers/deepfense_patches.py` |
+| `torch` | 2.11.0+cu128 | |
+| `torchaudio` | 2.11.0+cu128 | |
+| `torchcodec` | 0.16.0 | installed `--no-deps`, see below |
+| `transformers` | 4.55.4 | loads the XLS-R frontend |
+| `coqui-tts` | 0.27.5 | provides FreeVC |
+| `elevenlabs` | 2.65.0 | |
+| `numpy` | 2.1.3 | |
+| `soundfile` | 0.14.0 | |
+| `librosa` | 0.11.0 | |
+| `pandas` | 2.3.3 | |
+| `pyarrow` | 25.0.1 | Parquet manifests |
+| `scikit-learn` | 1.7.2 | |
 
-Generate experiment variants using the provided scripts.
+**Models.**
 
-```bash
-python training/make_loso_splits.py \
-  --splits-dir manifests/splits_norm \
-  --out manifests/loso
+| Model | Identifier |
+| --- | --- |
+| Frontend | `facebook/wav2vec2-xls-r-300m` |
+| Voice conversion | `voice_conversion_models/multilingual/vctk/freevc24`, via coqui-tts |
+| Text to speech | ElevenLabs Instant Voice Clone, hosted API |
+
+FreeVC is not vendored. coqui-tts downloads the `freevc24` checkpoint on first run. ElevenLabs is a hosted service, so its model version is whatever the API served at generation time -- the spoofs were generated 26-28 August 2026.
+
+**Two install traps.**
+
+`torchcodec` must be installed with `--no-deps`:
+
+```powershell
+venv\Scripts\python.exe -m pip install --no-deps torchcodec
 ```
 
-Then:
+From torch 2.9 onward, `TTS/__init__.py` checks that `torchcodec` merely EXISTS via `importlib.util.find_spec`. FreeVC never calls it; it decodes with librosa, so satisfying the check is enough. A plain `pip install coqui-tts[codec]` re-resolves the entire coqui-tts dependency tree inside the venv you train in, which is how a working torch/deepfense pair gets quietly replaced.
 
-```bash
-python training/make_ablation_configs.py --apply
+**FFmpeg** must be built with `libopus` and `libopencore_amrnb`. Record the version you used, since the codec augmentation depends on it:
+
+```powershell
+python training\codec_opus_amr.py --check-ffmpeg
+ffmpeg -version
 ```
 
-Experiments include:
+## ENVIRONMENT
 
-| Run             | Purpose                                   |
-| --------------- | ----------------------------------------- |
-| `train_main`    | Main experiment                           |
-| `noaug`         | Evaluate the effect of codec augmentation |
-| `opus`          | Train using Opus augmentation             |
-| `amr`           | Train using AMR augmentation              |
-| `loso_<system>` | Leave-one-synthesis-system-out evaluation |
-
-Run experiments **one at a time** when using a GPU with limited memory.
-
-Cross-condition evaluation does not require another training run.
-
-A single trained checkpoint can be evaluated against different test conditions such as:
-
-```text
-Clean
-Opus
-AMR
-```
-
----
-
-# What to Monitor
-
-## 1. Validation EER
-
-Monitor validation EER from the first epoch.
-
-Compare the model's EER with the shortcut-probe floor.
-
-EER is the primary metric for this project.
-
----
-
-## 2. Gradient clipping
-
-Look for:
-
-```text
-[grad-clip]
-```
-
-Frequent clipping can indicate that the learning rate may be aggressive for the dataset.
-
----
-
-## 3. Overfitting
-
-A common warning sign is:
-
-```text
-training loss ↓
-validation loss ↑
-```
-
-The training configuration includes early stopping.
-
----
-
-## 4. Accuracy
-
-Do not use raw `ACC` as the primary performance metric.
-
-The project uses OC-Softmax scoring, where the default threshold does not necessarily provide a meaningful accuracy measurement.
-
-Report:
-
-```text
-EER
-```
-
-as the primary detection metric.
-
----
-
-# Long-Running Training
-
-A long training run should not depend on an active SSH connection.
-
-If working on a remote Linux server, use an appropriate persistent session mechanism such as:
-
-```text
-tmux
-```
-
-or:
-
-```text
-screen
-```
-
-if available on the server.
-
-For example:
-
-```bash
-tmux new -s deepfense
-```
-
-Then start training:
-
-```bash
-python training/run_training.py \
-  --config training/configs/train_main.yaml
-```
-
-Detach with:
-
-```text
-Ctrl+B
-D
-```
-
-Reconnect later:
-
-```bash
-tmux attach -t deepfense
-```
-
-### Important
-
-Do not assume that closing your laptop or disconnecting SSH will preserve a normal foreground process.
-
-Before starting a long training run, verify that your session/job mechanism is persistent.
-
----
-
-# Storage Requirements
-
-Training checkpoints are large.
-
-Each checkpoint is approximately:
-
-```text
-~3.8 GB
-```
-
-A 30-epoch run can produce approximately:
-
-```text
-40–60 GB
-```
-
-depending on how many checkpoints are retained.
-
-Before starting a long run:
-
-```bash
-df -h
-```
-
-and, if needed:
-
-```bash
-du -sh outputs/
-```
-
-Keep:
-
-```text
-train.log
-results.json
-```
-
-for experiments that matter.
-
-These files are much smaller than the model checkpoints and provide the record of the experiment.
-
----
-
-# GPU Requirements
-
-GPU memory is a major constraint for the training configuration.
-
-The tested setup uses approximately:
-
-```text
-Batch size: 4
-Gradient accumulation: 4
-Effective batch size: 16
-```
-
-Batch size 8 has been observed to cause:
-
-```text
-torch.OutOfMemoryError
-```
-
-on the tested 8 GB VRAM environment.
-
-### Do not run other heavy GPU workloads during training.
-
-Games, other training processes, and GPU-heavy applications can consume several GB of VRAM.
-
-Two simultaneous training runs can exceed the available GPU memory.
-
-Run experiments sequentially unless the target machine has enough GPU memory to safely support concurrent jobs.
-
----
-
-# SVC1 Example Setup
-
-This section documents the setup used on the university SVC1 server.
-
-It is **specific to SVC1** and should not be assumed to apply to every Linux machine.
-
-## SSH
-
-SVC1 uses a custom SSH port:
-
-```text
-Host: svc1.dcism.org
-Port: 22081
-User: <your SVC1 username>
-```
-
-Example:
-
-```bash
-ssh -p 22081 <your-username>@svc1.dcism.org
-```
-
----
-
-## Storage
-
-SVC1 provides user storage through:
-
-```text
-Home directory
-~/archive
-```
-
-On the tested account:
-
-```text
-~
-└── archive -> /disk2/storage/users/<username>
-```
-
-The home directory is located on the NVMe filesystem, while `~/archive` points to the user's personal HDD storage.
-
-Check:
-
-```bash
-df -h ~ ~/archive
-```
-
-Do not assume that `/disk2` itself is writable.
-
-Use the user-specific `~/archive` path instead.
-
----
-
-## Recommended SVC1 layout
-
-A practical arrangement is:
-
-```text
-/data/users/<username>/
-│
-├── cebuano-audio-deepfake-detector/    # code + environment-related files
-│
-├── miniconda3/                         # Conda installation
-│
-├── bin/                                # user-local binaries such as FFmpeg
-│
-└── archive/
-    └── normalised/                     # large dataset
-        ├── bonafide/
-        ├── meta-mms/
-        └── elevenlabs/
-```
-
-This keeps active code/tools on the faster home/NVMe storage while allowing the large dataset to use the personal archive/HDD area.
-
----
-
-## Check the GPU
-
-```bash
-nvidia-smi
-```
-
-Before starting training, make sure another heavy job is not already using the GPU.
-
-Do not kill processes belonging to other users.
-
----
-
-## Verify the environment
-
-After reconnecting:
-
-```bash
-conda activate deepfense
-```
-
-Then:
-
-```bash
-cd ~/cebuano-audio-deepfake-detector
-```
-
-Check:
-
-```bash
-python --version
-which ffmpeg
-nvidia-smi
-```
-
-Then:
-
-```bash
-python training/codec_opus_amr.py --check-ffmpeg
-```
-
-and:
-
-```bash
-python training/deepfense_patches.py --verify
-```
-
----
-
-# Troubleshooting
-
-## `ffmpeg: command not found`
-
-If you do not have administrator privileges, install FFmpeg somewhere inside your home directory.
-
-For example:
-
-```text
-~/bin/ffmpeg
-```
-
-Then:
-
-```bash
-export PATH="$HOME/bin:$PATH"
-```
-
-To make it persistent:
-
-```bash
-echo 'export PATH="$HOME/bin:$PATH"' >> ~/.bashrc
-source ~/.bashrc
-```
-
-Verify:
-
-```bash
-which ffmpeg
-```
-
----
-
-## AMR-NB encoder is missing
-
-If the preflight reports:
-
-```text
-AMR-NB encoder 'libopencore_amrnb': MISSING
-```
-
-the FFmpeg binary does not contain the required encoder.
-
-Check:
-
-```bash
-ffmpeg -encoders | grep -i amr
-```
-
-and:
-
-```bash
-ffmpeg -buildconf | grep -i opencore
-```
-
-You need an FFmpeg build containing:
-
-```text
-libopencore_amrnb
-```
-
-Do not begin the main training run until this is fixed.
-
----
-
-## `conda-forge` cannot be accessed
-
-Some institutional servers may block or intercept access to Conda repositories.
-
-If Conda package installation fails with network or HTTP errors, use the package/environment sources available to your institution or install required tools into user-local directories where appropriate.
-
-Do not assume that `conda-forge` is accessible on every server.
-
----
-
-## `CUDA: False`
-
-Check:
-
-```bash
-nvidia-smi
-```
-
-Then:
-
-```bash
-python -c "import torch; print(torch.cuda.is_available())"
-```
-
-If the GPU is visible to `nvidia-smi` but not PyTorch, verify that the installed PyTorch build supports the machine's architecture and CUDA environment.
-
----
-
-## Manifest paths are incorrect
-
-Manifest files contain absolute paths.
-
-If the dataset is moved to another machine, rebuild the manifests there.
-
-Do not simply copy manifests generated on another computer and expect the paths to remain valid.
-
----
-
-## Linux path expansion issue
-
-This may fail to expand the home directory correctly:
-
-```bash
---spoof-root meta-mms=~/archive/normalised/meta-mms
-```
-
-Use:
-
-```bash
---spoof-root "meta-mms=$HOME/archive/normalised/meta-mms"
-```
-
-instead.
-
----
-
-## Training fails with an AMR transform error
-
-An error such as:
-
-```text
-AMR-NB augmentation requires the 'libopencore_amrnb' encoder
-```
-
-means the FFmpeg binary does not contain the required AMR-NB encoder.
-
-Run:
-
-```bash
-python training/codec_opus_amr.py --check-ffmpeg
-```
-
-and fix FFmpeg before retrying.
-
----
-
-## SSH disconnects during training
-
-Do not rely on a normal SSH session for long experiments.
-
-Use:
-
-```text
-tmux
-```
-
-or:
-
-```text
-screen
-```
-
-or the scheduler provided by your institution.
-
----
-
-# Important Methodology Notes
-
-## Paired dataset design
-
-The spoof dataset is designed so that synthetic utterances correspond to bonafide utterances with the same underlying text.
-
-This reduces the possibility that the detector learns content differences instead of synthesis artifacts.
-
-The pairing guard therefore intentionally removes spoof samples without valid bonafide counterparts.
-
----
-
-## Speaker-disjoint evaluation
-
-Train, validation, and test sets are split by speaker.
-
-This prevents the same speaker from appearing across multiple splits and reduces speaker-identity leakage.
-
-Always confirm:
-
-```text
-RESULT: speaker-disjoint
-```
-
-in the generated split summary.
-
----
-
-## Shortcut risk
-
-The shortcut probe exists to determine whether classification can be performed using simple acoustic or file-level properties.
-
-A strong shortcut-probe result does not automatically invalidate the experiment, but it is important when interpreting the detector's performance.
-
-The current corpus showed meaningful separability using non-content features, particularly features related to loudness and silence.
-
-Normalization and identical preprocessing across classes are therefore important parts of the pipeline.
-
-See:
-
-```text
-METHODOLOGY_AUDIT.md
-```
-
-for the detailed methodology discussion.
-
----
-
-# Recommended Pre-Training Checklist
-
-Before starting a long training run, verify all of the following:
-
-```text
-[ ] Correct repository checked out
-[ ] Correct dataset uploaded
-[ ] Bonafide dataset present
-[ ] Meta MMS dataset present
-[ ] ElevenLabs dataset present
-
-[ ] Manifests generated on the training machine
-[ ] Train/val/test split is speaker-disjoint
-[ ] Pairing guard completed
-[ ] Expected pairing count investigated
-
-[ ] Shortcut probe completed
-[ ] FFmpeg installed
-[ ] libopus available
-[ ] libopencore_amrnb available
-
-[ ] Correct Conda/venv activated
-[ ] PyTorch sees CUDA
-[ ] Correct GPU selected
-[ ] DeepFense patches verified
-
-[ ] Enough disk space available
-[ ] No competing heavy GPU jobs
-[ ] Persistent training session configured
-```
-
-Then:
-
-```bash
-python training/run_training.py \
-  --config training/configs/train_main.yaml
-```
-
----
-
-# Quick Start — Linux
-
-For a Linux machine where the dataset and repository are already available:
-
-```bash
-# Activate environment
-conda activate deepfense
-
-# Enter repository
-cd ~/cebuano-audio-deepfake-detector
-
-# Check GPU
-nvidia-smi
-
-# Check FFmpeg
-which ffmpeg
-python training/codec_opus_amr.py --check-ffmpeg
-
-# Verify dataset
-du -sh ~/archive/normalised
-
-# Build manifests
-python training/build_manifests.py \
-  --bonafide-root "$HOME/archive/normalised/bonafide" \
-  --spoof-root "meta-mms=$HOME/archive/normalised/meta-mms" \
-  --spoof-root "elevenlabs=$HOME/archive/normalised/elevenlabs" \
-  --speaker-manifest manifests/manifest_bonafide.csv \
-  --out manifests/splits_norm \
-  --unpaired-report manifests/splits_norm/unpaired_excluded.csv
-
-# Shortcut probe
-python training/probe_shortcuts.py \
-  --splits-dir manifests/splits_norm \
-  --eval-split test \
-  --workers 4 \
-  --cache outputs/probe_test.parquet
-
-# DeepFense preflight
-python training/deepfense_patches.py --verify
-
-# Train
-python training/run_training.py \
-  --config training/configs/train_main.yaml
-```
-
-For long-running training, start the final command inside `tmux`, `screen`, or the appropriate cluster job system.
-
----
-
-# Quick Start — Windows 
+### Windows
 
 ```powershell
 py -3.11 -m venv venv
 venv\Scripts\activate
 
-pip install soundfile librosa pandas numpy
-pip install wandb scikit-learn
-pip install transformers accelerate scipy
-pip install elevenlabs python-dotenv
+pip install -r requirements-lock.txt
+pip install --no-deps torchcodec
 ```
 
-Install a suitable FFmpeg build containing:
+`torchcodec` goes in separately and with `--no-deps` -- see VERSIONS above for why.
 
-```text
-libopus
-libopencore_amrnb
-libmp3lame
+Install an FFmpeg build containing `libopus` and `libopencore_amrnb`, and put it on PATH.
+
+### Linux / Conda
+
+Create the `deepfense` environment, then activate it before every session. Keep the code and environment on fast local storage and the dataset on whatever bulk storage the machine provides.
+
+Commands are the same as the PowerShell ones above with forward slashes and `\` continuations instead of backticks. One shell gotcha: `~` does not expand after `=`, so write
+
+```bash
+--spoof-root "voice-conv=$HOME/archive/normalised/voice-conv"
 ```
 
-Then run the pipeline:
+and not `--spoof-root voice-conv=~/archive/normalised/voice-conv`.
 
-```powershell
-python training\build_manifests.py ...
-python training\probe_shortcuts.py ...
-python training\deepfense_patches.py --verify
-python training\run_training.py --config training\configs\train_main.yaml
+### FFmpeg without admin rights
+
+Install it under your home directory, then put it on PATH:
+
+```bash
+export PATH="$HOME/bin:$PATH"
+echo 'export PATH="$HOME/bin:$PATH"' >> ~/.bashrc
+source ~/.bashrc
+which ffmpeg
 ```
 
----
+## SVC1 (UNIVERSITY SERVER)
 
-# Final Notes
+Specific to SVC1. Do not assume any of it applies to another Linux machine.
 
-The most important rule is:
+**SSH.** Custom port: `ssh -p 22081 <your-username>@svc1.dcism.org`
 
-> **Follow the pipeline in order, verify every preflight, and do not start a long GPU run until the environment, codecs, manifests, storage, and GPU availability have all been checked.**
+**Storage.** The home directory is on NVMe; `~/archive` is a symlink to personal HDD storage at `/disk2/storage/users/<username>`. Check both with `df -h ~ ~/archive`. `/disk2` itself is not writable - always go through `~/archive`.
 
-The project-specific methodology and experimental decisions are documented separately in:
+A practical layout keeps code, conda and user-local binaries on the fast home storage and the large normalised dataset under `~/archive/normalised/`.
 
-```text
-METHODOLOGY_AUDIT.md
-```
+**Before training.** Run `nvidia-smi` and check nobody else's job is already on the GPU. Do not kill other users' processes.
+
+**After reconnecting.** `conda activate deepfense`, `cd` into the repository, then confirm `python --version`, `which ffmpeg`, `nvidia-smi`, `python training/codec_opus_amr.py --check-ffmpeg` and `python training/helpers/deepfense_patches.py --verify`.
+
+## TROUBLESHOOTING
+
+**`ffmpeg: command not found`** - see "FFmpeg without admin rights" above.
+
+**`AMR-NB encoder 'libopencore_amrnb': MISSING`** - the FFmpeg build lacks the encoder. Check with `ffmpeg -encoders | grep -i amr` and `ffmpeg -buildconf | grep -i opencore`. Fix it before the main run; training will fail partway through otherwise.
+
+**Training fails with an AMR transform error** - same cause. Run `python training/codec_opus_amr.py --check-ffmpeg`.
+
+**KeyError from the Transform registry** - you launched `deepfense train` directly. Use `run_training.py`.
+
+**`conda-forge` cannot be accessed** - some institutional networks block it. Use whatever package source your institution provides, or install user-local.
+
+**`CUDA: False`** - check `nvidia-smi`, then `python -c "import torch; print(torch.cuda.is_available())"`. If the GPU is visible to one and not the other, the installed PyTorch build does not match the machine's CUDA environment.
+
+**Manifest paths are wrong** - manifests store absolute paths. Rebuild them on the machine that will train. Do not copy them across machines.
+
+**`expected one argument` after `--root`** - you typed `"$env:PLD_CORPUS_ROOT"` on the command line. PowerShell does not read `.env`, so it expanded to an empty string. Omit `--root` entirely; the script reads `.env` itself.
+
+**SSH disconnects during training** - see "Persistent session" above.
+
+## METHODOLOGY NOTES
+
+**Paired design.** Every spoof utterance corresponds to a bonafide utterance with the same text, so the detector cannot separate the classes on linguistic content. The pairing guard enforces this by dropping unpaired spoof clips.
+
+**Speaker-disjoint evaluation.** Splits are partitioned by speaker, not by clip, so no speaker appears in more than one split and speaker identity cannot leak. Always confirm `RESULT: speaker-disjoint` in the split summary.
+
+**Shortcut risk.** Both classes came off different production chains, and that difference is learnable without listening to the speech. The probe measures it; identical preprocessing across both classes is what reduces it. A residual leak is not automatically fatal, but it has to be measured and reported rather than assumed away.
+
+**Normalisation is peak, and only peak.** ASVspoof 5's shortcut-artefact pipeline scales each waveform so its peak equals 1.0, and that is what this pipeline does. Gated BS.1770-4 loudness, plain RMS, a common dither floor and an MP3 equalisation pass were all implemented and all removed: none is what this field does, and each would mean defending a departure from the literature on our own measurements. The dither also backfired when measured - at -75 dBFS it sat under half a least-significant bit, quiet passages still rounded to bit-exact zero, and `frac_exact_zero` went from 0.5000 to 0.3115. It created the cue it was meant to remove.
+
+**Codec augmentation.** Opus at a stochastic 6-32 kbps and AMR-NB cycling its eight standard rates, both applied on the fly through ffmpeg so nothing extra is written to disk. AMR-NB is an 8 kHz codec, so the transform resamples down, encodes, decodes and resamples back - that round trip is part of the channel degradation being simulated, not a bug.

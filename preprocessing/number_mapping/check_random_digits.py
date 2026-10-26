@@ -11,16 +11,40 @@ The generated TSV contains:
 
 The original corpus is never modified.
 
-Usage:
-    python preprocessing\number_mapping\check_random_digits.py \
-        --root "C:\path\to\original\bonafide" \
-        --voice-ids "manifests\elevenlabs_voice_ids.txt" \
-        --out "manifests\elevenlabs_number_regeneration.tsv"
+--voice-ids and --out are required.
+
+    --root        OPTIONAL. The ORIGINAL corpus (not data/processed, not
+                  data/normalised). Defaults to PLD_CORPUS_ROOT, read from
+                  the .env file at the project root (copy .env.example).
+    --voice-ids   speaker -> ElevenLabs voice ID map
+    --out         TSV to write; feeds regenerate_elevenlabs.py
+
+Note: .env is read by this script, NOT by your shell. Do NOT write
+"$env:PLD_CORPUS_ROOT" on the command line -- PowerShell expands that to an
+empty string. Just omit --root.
+
+Usage (PowerShell):
+
+    python preprocessing\number_mapping\check_random_digits.py --voice-ids manifests\elevenlabs_voice_ids.txt --out manifests\elevenlabs_number_regeneration.tsv
+
+    # to point at a different corpus for one run, pass --root explicitly
+    python preprocessing\number_mapping\check_random_digits.py --root "D:\some\other\corpus" --voice-ids manifests\elevenlabs_voice_ids.txt --out manifests\elevenlabs_number_regeneration.tsv
+
+The output TSV is then passed to:
+
+    python preprocessing\elevenlabs\regenerate_elevenlabs.py manifests\elevenlabs_number_regeneration.tsv
 """
 
 import argparse
+import os
 import sys
 from pathlib import Path
+
+from dotenv import load_dotenv
+
+# parents[0]=number_mapping, parents[1]=preprocessing, parents[2]=project root
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+load_dotenv(PROJECT_ROOT / ".env")
 
 # ---------------------------------------------------------------------------
 # NUMBER -> ELEVENLABS TTS MAPPING
@@ -260,10 +284,10 @@ def main():
 
     parser.add_argument(
         "--root",
-        required=True,
+        default=None,
         help=(
-            "Path to ORIGINAL corpus / bonafide root containing "
-            "speaker folders"
+            "Path to ORIGINAL corpus / bonafide root containing speaker "
+            "folders. Defaults to PLD_CORPUS_ROOT from .env"
         ),
     )
 
@@ -281,7 +305,18 @@ def main():
 
     args = parser.parse_args()
 
-    root = Path(args.root)
+    root_raw = args.root or os.environ.get("PLD_CORPUS_ROOT")
+    if not root_raw:
+        print(
+            "ERROR: no corpus root.\n"
+            "  Either pass --root, or copy .env.example to .env and set\n"
+            "  PLD_CORPUS_ROOT to the ORIGINAL PLD CEB corpus (the folder\n"
+            "  holding one directory per speaker).",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    root = Path(root_raw)
     voice_ids_path = Path(args.voice_ids)
     out_path = Path(args.out)
 

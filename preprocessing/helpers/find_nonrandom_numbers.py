@@ -17,18 +17,34 @@ under 10 and not Random Digit — see extract_transcripts.py). This
 script tells you how many such utterances actually exist and what they
 look like, so you can decide whether that matters for your corpus.
 
-Usage:
-    python preprocessing/find_nonrandom_numbers.py \
-        --root "C:\Users\Ninzz\Programming\PLD\up-dsp-pld\PLD\CEB" \
-        --speakers-csv manifests\elevenlabs_selected_speakers.csv \
+--root is OPTIONAL. It defaults to PLD_CORPUS_ROOT, which this script
+reads from the .env file at the project root (copy .env.example).
+
+Note: .env is read by this script, NOT by your shell. Do NOT write
+"$env:PLD_CORPUS_ROOT" on the command line -- PowerShell expands that to an
+empty string and argparse fails with "expected one argument". Just omit
+--root and let the script read .env.
+
+Usage (PowerShell -- a line is continued with a BACKTICK, not a backslash):
+
+    python preprocessing\helpers\find_nonrandom_numbers.py `
+        --speakers-csv manifests\elevenlabs_selected_speakers.csv `
         --out nonrandom_numbers.csv
+
 """
 
 import argparse
+import os
 import csv
 import re
 import sys
 from pathlib import Path
+
+from dotenv import load_dotenv
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+load_dotenv(PROJECT_ROOT / ".env")
+
 
 # ---------------------------------------------------------------------------
 # Same parsing rules as extract_transcripts.py
@@ -107,10 +123,11 @@ def main():
     )
     parser.add_argument(
         "--root",
-        required=True,
+        default=None,
         help=(
             "Path to the corpus root folder "
-            "(speaker subfolders with .log files)"
+            "(speaker subfolders with .log files). "
+            "Default: PLD_CORPUS_ROOT from .env"
         ),
     )
     parser.add_argument(
@@ -134,7 +151,18 @@ def main():
     )
     args = parser.parse_args()
 
-    root = Path(args.root)
+    root_raw = args.root or os.environ.get("PLD_CORPUS_ROOT")
+    if not root_raw:
+        print(
+            "ERROR: no corpus root.\n"
+            "  Either pass --root, or copy .env.example to .env and set\n"
+            "  PLD_CORPUS_ROOT to the ORIGINAL PLD CEB corpus (the folder\n"
+            "  holding one directory per speaker).",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    root = Path(root_raw)
     speakers_csv = Path(args.speakers_csv)
 
     if not root.exists():
